@@ -5,6 +5,7 @@ import {AppModule} from "./app.module"
 import {ValidationPipe} from "@nestjs/common"
 import {SeedService} from "./modules/seed/seed.service"
 import {consoleLogger} from "./config/logger.config"
+import {FileWatcher} from "./utils/file-watcher"
 
 async function bootstrap() {
 	// Redirect console logs
@@ -39,6 +40,9 @@ async function bootstrap() {
 	const seedService = app.get(SeedService)
 	await seedService.seed()
 
-	await app.listen(process.env.PORT || 3000)
+	await app.listen(process.env.PORT || 5000)
+
+	// Initialize file watcher for automatic logging
+	new FileWatcher()
 }
 bootstrap()
