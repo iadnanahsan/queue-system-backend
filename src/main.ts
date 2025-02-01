@@ -4,33 +4,63 @@ import {SwaggerModule, DocumentBuilder} from "@nestjs/swagger"
 import {AppModule} from "./app.module"
 import {ValidationPipe} from "@nestjs/common"
 import {SeedService} from "./modules/seed/seed.service"
-import {consoleLogger} from "./config/logger.config"
-import {FileWatcher} from "./utils/file-watcher"
+import {corsConfig} from "./config/cors.config"
+
+import * as net from "net"
+
+async function killPort(port: number): Promise<void> {
+	return new Promise((resolve, reject) => {
+		const server = net.createServer()
+		server.once("error", (err: NodeJS.ErrnoException) => {
+			if (err.code === "EADDRINUSE") {
+				// Port is in use, try to close it
+				server.close()
+				server.listen(port, () => {
+					server.close()
+					resolve()
+				})
+			} else {
+				reject(err)
+			}
+		})
+		server.once("listening", () => {
+			server.close()
+			resolve()
+		})
+		server.listen(port)
+	})
+}
 
 async function bootstrap() {
-	// Redirect console logs
-	const originalConsoleLog = console.log
-	console.log = (...args) => {
-		originalConsoleLog(...args)
-		consoleLogger.info(args.join(" "))
+	const PORT = 5000
+
+	// Kill any process using port 5000
+	try {
+		await killPort(PORT)
+	} catch (error) {
+		console.log("Port cleanup error:", error)
 	}
 
 	const app = await NestFactory.create(AppModule, {
 		logger: ["error", "warn", "log", "debug", "verbose"],
 	})
 
+	// Enable CORS with configuration
+	app.enableCors(corsConfig())
+
 	// Validation
 	app.useGlobalPipes(new ValidationPipe())
 
 	// Swagger Setup
 	const config = new DocumentBuilder()
-		.setTitle("Queue Management System API")
-		.setDescription("API Documentation for Hospital Queue Management")
+		.setTitle("Hospital Queue Management System")
+		.setDescription("API Documentation for Queue Management System")
 		.setVersion("1.0")
-		.addTag("auth")
-		.addTag("queue")
-		.addTag("department")
-		.addTag("display")
+		.addTag("auth", "Authentication endpoints")
+		.addTag("queue", "Queue management endpoints")
+		.addTag("departments", "Department management endpoints")
+		.addTag("counters", "Counter management endpoints")
+		.addTag("display", "Display screen endpoints")
 		.addBearerAuth()
 		.build()
 
@@ -40,9 +70,13 @@ async function bootstrap() {
 	const seedService = app.get(SeedService)
 	await seedService.seed()
 
-	await app.listen(process.env.PORT || 5000)
+	try {
+		await app.listen(PORT)
+		console.log(`Application is running on port ${PORT}`)
+	} catch (error) {
+		console.error("Failed to start server:", error)
+		process.exit(1)
+	}
 
-	// Initialize file watcher for automatic logging
-	new FileWatcher()
 }
 bootstrap()

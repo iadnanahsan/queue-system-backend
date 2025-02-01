@@ -1,4 +1,4 @@
-import {Controller, Post, Body, UseGuards} from "@nestjs/common"
+import {Controller, Post, Body, HttpCode, HttpStatus} from "@nestjs/common"
 import {ApiTags, ApiOperation, ApiResponse} from "@nestjs/swagger"
 import {AuthService} from "./auth.service"
 import {LoginDto} from "./dto/login.dto"
@@ -6,14 +6,14 @@ import {LoginDto} from "./dto/login.dto"
 @ApiTags("auth")
 @Controller("auth")
 export class AuthController {
-	constructor(private authService: AuthService) {}
+	constructor(private readonly authService: AuthService) {}
 
 	@Post("login")
+	@HttpCode(HttpStatus.OK)
 	@ApiOperation({summary: "Login user"})
-	@ApiResponse({status: 200, description: "Login successful"})
-	@ApiResponse({status: 401, description: "Invalid credentials"})
+	@ApiResponse({status: HttpStatus.OK, description: "Login successful"})
+	@ApiResponse({status: HttpStatus.UNAUTHORIZED, description: "Invalid credentials"})
 	async login(@Body() loginDto: LoginDto) {
-		const user = await this.authService.validateUser(loginDto)
-		return this.authService.login(user)
+		return this.authService.login(loginDto)
 	}
 }

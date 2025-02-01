@@ -1,5 +1,7 @@
-import {Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn} from "typeorm"
+import {Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn, OneToOne} from "typeorm"
 import {Department} from "./department.entity"
+import {Counter} from "./counter.entity"
+import {UserRole} from "../modules/users/enums/user-role.enum"
 
 @Entity("users")
 export class User {
@@ -15,26 +17,30 @@ export class User {
 	@Column({
 		type: "varchar",
 		length: 20,
-		enum: ["admin", "receptionist", "counter_staff"],
+		enum: UserRole,
 	})
-	role: string
+	role: UserRole
 
 	@Column({type: "uuid", nullable: true})
-	department_id: string
+	department_id?: string
 
-	@Column({type: "int", nullable: true})
-	counter_id: number
+	@Column({name: "counter_id", type: "int", nullable: true})
+	counter_id?: number
 
 	@Column({type: "boolean", default: true})
 	is_active: boolean
 
 	@Column({type: "timestamp", nullable: true})
-	last_login: Date
+	last_login?: Date
 
 	@CreateDateColumn()
 	created_at: Date
 
 	@ManyToOne(() => Department)
 	@JoinColumn({name: "department_id"})
-	department: Department
+	department?: Department
+
+	@OneToOne(() => Counter)
+	@JoinColumn({name: "counter_id"})
+	counter?: Counter
 }

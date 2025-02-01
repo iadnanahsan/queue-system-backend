@@ -1,8 +1,9 @@
 export interface JwtPayload {
-	sub: string
 	username: string
+	sub: string
 	role: string
 	departmentId?: string
+	counterId?: number
 	iat?: number
 	exp?: number
 }

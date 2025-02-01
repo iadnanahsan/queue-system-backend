@@ -1,3 +1,10 @@
+import {User} from "../../../entities/user.entity"
+
+export type UserFromAuth = Pick<
+	User,
+	"id" | "username" | "password_hash" | "role" | "department_id" | "counter_id" | "last_login"
+>
+
 export interface LoginResponse {
 	access_token: string
 	user: {
@@ -6,12 +13,4 @@ export interface LoginResponse {
 		role: string
 		departmentId?: string
 	}
-}
-
-export interface UserFromAuth {
-	id: string
-	username: string
-	password_hash: string
-	role: string
-	department_id?: string
 }

@@ -1,0 +1,275 @@
+{
+	"info": {
+		"name": "Hospital Queue System API",
+		"description": "Complete API collection for Hospital Queue Management System",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Authentication",
+			"item": [
+				{
+					"name": "Login",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": "{{baseUrl}}/auth/login",
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"admin\",\n    \"password\": \"admin123\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Departments",
+			"item": [
+				{
+					"name": "Create Department",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [{"key": "token", "value": "{{token}}"}]
+						},
+						"method": "POST",
+						"header": [],
+						"url": "{{baseUrl}}/departments",
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name_en\": \"Cardiology\",\n    \"name_ar\": \"قسم القلب\",\n    \"prefix\": \"C\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						}
+					}
+				},
+				{
+					"name": "Get All Departments",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [{"key": "token", "value": "{{token}}"}]
+						},
+						"method": "GET",
+						"url": "{{baseUrl}}/departments"
+					}
+				},
+				{
+					"name": "Get Department by ID",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [{"key": "token", "value": "{{token}}"}]
+						},
+						"method": "GET",
+						"url": "{{baseUrl}}/departments/:id"
+					}
+				},
+				{
+					"name": "Update Department",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [{"key": "token", "value": "{{token}}"}]
+						},
+						"method": "PUT",
+						"url": "{{baseUrl}}/departments/:id",
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name_en\": \"Updated Name\",\n    \"name_ar\": \"الاسم المحدث\",\n    \"prefix\": \"U\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						}
+					}
+				},
+				{
+					"name": "Delete Department",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [{"key": "token", "value": "{{token}}"}]
+						},
+						"method": "DELETE",
+						"url": "{{baseUrl}}/departments/:id"
+					}
+				},
+				{
+					"name": "Check Health",
+					"request": {
+						"method": "GET",
+						"url": "{{baseUrl}}/departments/health"
+					}
+				}
+			]
+		},
+		{
+			"name": "Queue Management",
+			"item": [
+				{
+					"name": "Register Patient",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [{"key": "token", "value": "{{token}}"}]
+						},
+						"method": "POST",
+						"url": "{{baseUrl}}/queue/register",
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"fileNumber\": \"F12345\",\n    \"patientName\": \"John Doe\",\n    \"departmentId\": \"uuid\",\n    \"priority\": false\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						}
+					}
+				},
+				{
+					"name": "Update Queue Status",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [{"key": "token", "value": "{{token}}"}]
+						},
+						"method": "PUT",
+						"url": "{{baseUrl}}/queue/:id/status",
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"status\": \"serving\",\n    \"counterId\": 1\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						}
+					}
+				},
+				{
+					"name": "Get Department Queue",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [{"key": "token", "value": "{{token}}"}]
+						},
+						"method": "GET",
+						"url": "{{baseUrl}}/queue/department/:departmentId"
+					}
+				},
+				{
+					"name": "Get Counter Queue",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [{"key": "token", "value": "{{token}}"}]
+						},
+						"method": "GET",
+						"url": "{{baseUrl}}/queue/counter/:counterId/current"
+					}
+				},
+				{
+					"name": "Get Department Stats",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [{"key": "token", "value": "{{token}}"}]
+						},
+						"method": "GET",
+						"url": "{{baseUrl}}/queue/department/:departmentId/stats"
+					}
+				},
+				{
+					"name": "Call Patient",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [{"key": "token", "value": "{{token}}"}]
+						},
+						"method": "POST",
+						"url": "{{baseUrl}}/queue/:id/call"
+					}
+				},
+				{
+					"name": "Get Next Patient",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [{"key": "token", "value": "{{token}}"}]
+						},
+						"method": "POST",
+						"url": "{{baseUrl}}/queue/counter/:counterId/next"
+					}
+				}
+			]
+		},
+		{
+			"name": "Counters",
+			"item": [
+				{
+					"name": "Create Counter",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [{"key": "token", "value": "{{token}}"}]
+						},
+						"method": "POST",
+						"url": "{{baseUrl}}/counters",
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"departmentId\": \"uuid\",\n    \"number\": 1\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						}
+					}
+				},
+				{
+					"name": "Get All Counters",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [{"key": "token", "value": "{{token}}"}]
+						},
+						"method": "GET",
+						"url": "{{baseUrl}}/counters"
+					}
+				},
+				{
+					"name": "Get Department Counters",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [{"key": "token", "value": "{{token}}"}]
+						},
+						"method": "GET",
+						"url": "{{baseUrl}}/counters/department/:departmentId"
+					}
+				},
+				{
+					"name": "Toggle Counter Status",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [{"key": "token", "value": "{{token}}"}]
+						},
+						"method": "PUT",
+						"url": "{{baseUrl}}/counters/:id/toggle"
+					}
+				}
+			]
+		}
+	]
+}

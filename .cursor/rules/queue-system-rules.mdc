@@ -1,0 +1,136 @@
+---
+description: Core rules and requirements for Queue Management System
+globs: src/**/*.ts", "docs/**/*.md", ".cursor/rules/*.ts
+---
+# Queue Management System Rules
+
+## 1. Core Requirements
+@docs/main-final/queue-system-backend-docs.md {
+    - Database Schema must follow documented structure
+    - Environment variables must be properly configured
+    - WebSocket implementation required for real-time updates
+    - Error handling must follow global exception filter pattern
+}
+
+## 2. API Standards
+@docs/main-final/api-documentation-guide.md {
+    - All endpoints must be documented in Swagger
+    - Follow RESTful principles
+    - Include proper authentication
+    - Implement role-based access
+}
+
+## 3. Project Structure
+@.cursor/rules/project-structure.ts {
+    - Follow module structure rules
+    - Maintain proper file naming conventions
+    - Keep documentation updated
+    - Trigger appropriate actions on file changes
+}
+
+## 4. Development Process
+@.cursor/rules/commands.ts {
+    - Use @log for development progress
+    - Use @structure for folder changes
+    - Use @rules for rule updates
+    - Follow command templates strictly
+}
+
+## 5. Requirements Compliance
+@.cursor/rules/requirements-compliance.ts {
+    - Stay within original scope
+    - No assumption-based features
+    - Document all enhancements
+    - Follow validation process
+}
+
+## 6. Task Priority
+@.cursor/rules/task-priority.ts {
+    - Complete CRITICAL tasks first
+    - Follow dependency order
+    - Block lower priority if higher pending
+    - Document task completion
+}
+
+## 7. Implementation Order
+@docs/development-log.md {
+    1. Core Queue System:
+        - Queue number generation
+        - Patient registration
+        - Status management
+    2. Real-time Updates:
+        - WebSocket gateway
+        - Display screen updates
+    3. Supporting Features:
+        - Department management
+        - Counter assignment
+}
+
+## 8. Documentation Standards
+@.cursor/rules/logging-standards.ts {
+    - Keep development log updated
+    - Include timestamps (WIB timezone)
+    - Document all changes
+    - Follow log structure
+}
+
+## 9. Validation Rules
+@.cursor/rules/validation.ts {
+    - Follow database schema constraints
+    - Implement DTO validation
+    - Use proper type checking
+    - Handle edge cases
+}
+
+## 10. Progress Tracking
+@.cursor/rules/progress-tracker.ts {
+    - Update implementation stages
+    - Track dependencies
+    - Document blocking issues
+    - Follow next steps template
+}
+
+## Required Commands
+
+1. When Adding Features:
+```bash
+@log
+- Added: Feature name
+- Files: path/to/files
+- Next: Implementation steps
+```
+
+2. When Updating Structure:
+```bash
+@structure
+- Location: path/to/module
+- Purpose: Module purpose
+```
+
+3. When Checking Requirements:
+```bash
+@req-validate
+- Requirement: Original requirement
+- Implementation: Current implementation
+```
+
+## Automated Checks
+
+1. Pre-commit:
+    - Requirements compliance
+    - Documentation updates
+    - Code formatting
+    - Test coverage
+
+2. File Changes:
+    - Structure documentation
+    - Development log
+    - API documentation
+    - Requirements validation
+
+## Notes
+
+- All timestamps must be in WIB (Jakarta) timezone
+- Follow NestJS best practices
+- Maintain proper error handling
+- Keep documentation in sync with implementation

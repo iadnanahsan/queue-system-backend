@@ -1,7 +1,6 @@
 import {Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, OneToMany} from "typeorm"
-import {User} from "./user.entity"
 import {Counter} from "./counter.entity"
-import {QueueEntry} from "./queue-entry.entity"
+import {QueueEntry} from "../modules/queue/entities/queue-entry.entity"
 
 @Entity("departments")
 export class Department {
@@ -22,9 +21,6 @@ export class Department {
 
 	@CreateDateColumn()
 	created_at: Date
-
-	@OneToMany(() => User, (user) => user.department)
-	users: User[]
 
 	@OneToMany(() => Counter, (counter) => counter.department)
 	counters: Counter[]

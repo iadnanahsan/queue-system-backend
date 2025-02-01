@@ -9,6 +9,11 @@ import {User} from "../../entities/user.entity"
 import {Department} from "../../entities/department.entity"
 import {Counter} from "../../entities/counter.entity"
 import * as bcrypt from "bcryptjs"
+import {UsersService} from "../users/users.service"
+import {DepartmentService} from "../departments/departments.service"
+import {CountersService} from "../counters/counters.service"
+import {UserRole} from "../users/enums/user-role.enum"
+import {UsersSeedService} from "./services/users-seed.service"
 
 @Injectable()
 export class SeedService {
@@ -18,29 +23,63 @@ export class SeedService {
 		@InjectRepository(Department)
 		private departmentRepository: Repository<Department>,
 		@InjectRepository(Counter)
-		private counterRepository: Repository<Counter>
+		private counterRepository: Repository<Counter>,
+		private usersService: UsersService,
+		private departmentService: DepartmentService,
+		private countersService: CountersService,
+		private usersSeedService: UsersSeedService
 	) {}
 
 	async seed() {
-		await this.createAdmin()
-		await this.createDepartments()
-		await this.createCounters()
+		// Create admin if doesn't exist
+		await this.seedAdmin()
+
+		// Only seed test data in development
+		if (process.env.NODE_ENV === "development") {
+			await this.seedTestData()
+		}
+
+		await this.usersSeedService.seed()
 	}
 
-	private async createAdmin() {
-		const adminExists = await this.userRepository.findOne({
-			where: {username: "admin"},
-		})
-
+	private async seedAdmin() {
+		const adminExists = await this.usersService.findByUsername("admin")
 		if (!adminExists) {
-			const passwordHash = await bcrypt.hash("admin123", 10)
-			await this.userRepository.save({
+			await this.usersService.createUser({
 				username: "admin",
-				password_hash: passwordHash,
-				role: "admin",
-				is_active: true,
+				password: "admin123",
+				role: UserRole.ADMIN,
 			})
 		}
+	}
+
+	private async seedTestData() {
+		// Create test department
+		const dept = await this.departmentService.create({
+			name_en: "Radiology",
+			name_ar: "قسم الأشعة",
+			prefix: "R",
+		})
+
+		// Create counters
+		await this.countersService.create({
+			department_id: dept.id,
+			number: 1,
+		})
+
+		// Create test staff
+		await this.usersService.createUser({
+			username: "staff1",
+			password: "staff123",
+			role: UserRole.COUNTER_STAFF,
+			department_id: dept.id,
+		})
+
+		await this.usersService.createUser({
+			username: "reception1",
+			password: "reception123",
+			role: UserRole.RECEPTIONIST,
+		})
 	}
 
 	private async createDepartments() {

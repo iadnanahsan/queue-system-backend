@@ -112,6 +112,22 @@ CREATE TABLE display_access_codes (
 );
 ```
 
+## WebSocket Events
+
+```typescript
+interface WSEvents {
+	"queue:new": QueueEntry // New entry created
+	"queue:update": QueueEntry // Status changed
+	"queue:call": {
+		// Audio call
+		queueId: string
+		counter: number
+	}
+	"counter:update": CounterState // Counter status change
+	"sync:request": SyncRequest // Client sync request
+}
+```
+
 ## Redis Schema
 
 ```typescript

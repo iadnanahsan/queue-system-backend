@@ -1,4 +1,45 @@
 export const loggingStandards = {
+	// File patterns to watch
+	watchPatterns: {
+		code: ["src/**/*.ts", "src/**/*.js"],
+		docs: ["docs/**/*.md"],
+		tests: ["test/**/*.ts", "test/**/*.js"],
+	},
+
+	// Development log structure
+	logStructure: {
+		sectionMarkers: {
+			implementation: "## Implementation Log",
+			currentStatus: "## Current Status",
+			nextSteps: "## Next Steps",
+		},
+		entryTemplate: `
+### {title} ({timestamp})
+
+**Files Modified:**
+{files}
+
+**Changes:**
+\`\`\`diff
+{changes}
+\`\`\`
+
+**Status:**
+- ✅ Implementation: {status}
+- 🔄 Next Steps:
+{nextSteps}
+
+---
+`,
+	},
+
+	// Git integration
+	git: {
+		trackUncommitted: true,
+		includeAuthor: true,
+		includeBranch: true,
+	},
+
 	// Logging Format Standards
 	format: {
 		console: {
@@ -62,5 +103,20 @@ export const loggingStandards = {
 				automatic: true,
 			},
 		],
+	},
+
+	developmentLog: {
+		required: true,
+		file: "docs/development-log.md",
+		autoUpdate: true,
+		triggers: {
+			moduleChanges: true,
+			configChanges: true,
+			entityChanges: true,
+		},
+		format: {
+			dateFormat: "WIB",
+			sections: ["Implementation", "Changes", "Next Steps"],
+		},
 	},
 }

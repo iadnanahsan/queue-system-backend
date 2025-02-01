@@ -3,19 +3,19 @@ import {Department} from "./department.entity"
 
 @Entity("counters")
 export class Counter {
-	@PrimaryGeneratedColumn("increment")
+	@PrimaryGeneratedColumn()
 	id: number
 
-	@Column({type: "uuid"})
+	@Column({name: "department_id", type: "uuid"})
 	department_id: string
 
 	@Column({type: "int"})
 	number: number
 
-	@Column({type: "boolean", default: true})
+	@Column({name: "is_active", type: "boolean", default: true})
 	is_active: boolean
 
-	@CreateDateColumn()
+	@CreateDateColumn({name: "created_at"})
 	created_at: Date
 
 	@ManyToOne(() => Department)

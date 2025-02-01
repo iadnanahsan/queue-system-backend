@@ -67,6 +67,10 @@ export const cursorCommands = {
 			`,
 			required: ["title", "changes", "files", "nextSteps"],
 			file: "docs/development-log.md",
+			requirementsCheck: {
+				enforce: true,
+				validateAgainst: "requirementsCompliance",
+			},
 		},
 		"@structure": {
 			description: "Update folder structure",
@@ -106,6 +110,24 @@ export const cursorCommands = {
 			`,
 			required: ["current_stage", "immediate_tasks"],
 			file: "docs/development-log.md",
+		},
+		"@req-validate": {
+			description: "Validate changes against requirements",
+			template: `
+				## Requirement Validation
+				
+				Original Requirement:
+				{requirement}
+				
+				Implementation:
+				{implementation}
+				
+				Validation:
+				- [ ] Matches original scope
+				- [ ] No unnecessary additions
+				- [ ] Follows best practices
+			`,
+			required: ["requirement", "implementation"],
 		},
 	},
 

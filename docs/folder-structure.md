@@ -1,120 +1,103 @@
 # Project Folder Structure
 
-## Root Structure
+## Current Implementation
 
 ```
-queue-system/
-├── src/                  # Source code
-├── docs/                 # Documentation
-├── .env                  # Environment variables
-└── package.json         # Project dependencies
+├── config/
+  ├── cors.config.ts          # CORS security configuration
+  ├── database.config.ts      # Database connection settings
+  ├── logger.config.ts        # Winston logger setup
+  └── typeorm.config.ts       # Migration configuration
+├── entities/
+  ├── counter.entity.ts       # Counter data model
+  ├── department.entity.ts
+  ├── display-access-code.entity.ts
+  ├── index.ts
+  ├── queue-entry.entity.ts
+  └── user.entity.ts
+├── migrations/
+  ├── 1738276871093-InitialSchema.ts        # Initial database setup
+  └── 1738276871094-QueueSystemEntities.ts  # Queue system tables
+├── modules/
+  ├── auth/                  # Authentication module
+    ├── dto/
+      └── login.dto.ts       # Login validation
+    ├── interfaces/
+      └── auth.interfaces.ts # Auth types
+    ├── auth.controller.ts   # Auth endpoints
+    ├── auth.module.ts       # Module config
+    ├── auth.service.ts      # Auth logic
+    └── jwt.strategy.ts      # JWT handling
+  ├── common/               # Shared functionality
+    ├── decorators/
+      └── roles.decorator.ts # Role-based access
+    ├── guards/             # Auth guards
+    ├── interfaces/
+      └── jwt-payload.interface.ts
+  ├── counters/            # Counter management
+    ├── entities/
+      └── counter.entity.ts # Counter model
+  ├── departments/         # Department management
+    ├── dto/
+      └── create-department.dto.ts
+    ├── entities/
+      └── department.entity.ts
+    ├── departments.controller.ts
+    └── departments.service.ts
+  ├── queue/              # Queue management
+    ├── dto/
+      └── register-patient.dto.ts
+    ├── entities/
+      └── queue-entry.entity.ts
+    ├── interfaces/
+      └── queue-number.interface.ts
+    ├── services/
+      └── queue-number.service.ts
+    ├── queue.controller.ts
+    ├── queue.module.ts
+    └── queue.service.ts
+  ├── seed/              # Database seeding
+    ├── seed.module.ts
+    └── seed.service.ts
+  ├── users/            # User management
+    ├── dto/
+      └── create-admin.dto.ts
+    ├── users.module.ts
+    └── users.service.ts
+├── utils/             # Utility functions
+  ├── file-watcher.ts           # File monitoring
+  ├── list-structure.js         # Structure generator
+  ├── list-structure.ts         # Structure generator (TS)
+  ├── log-automation.ts         # Automated logging
+  ├── requirement-review.ts     # Requirements tracking
+  ├── task-completion-tracker.ts # Task tracking
+  ├── task-dependency-validator.ts # Task dependencies
+  ├── task-matcher.ts          # Task detection
+  └── task-tracker.ts          # Progress tracking
+├── app.module.ts     # Root module
+└── main.ts          # Application entry
 ```
 
-## Source Code (`src/`)
-
-### Config Files
+## Project Rules
 
 ```
-config/
-├── database.config.ts    # Database connection settings for NestJS
-└── typeorm.config.ts     # TypeORM configuration for migrations
+.cursor/rules/
+├── commands.ts                # Command definitions
+├── folder-structure.ts        # Structure validation
+├── logging-standards.ts       # Logging format
+├── project-structure.ts       # Project organization
+├── requirements-compliance.ts # Requirements tracking
+└── task-priority.ts          # Task priority rules
 ```
 
-### Database Entities
-
-```
-entities/
-├── user.entity.ts           # User table structure
-├── department.entity.ts     # Department table structure
-├── counter.entity.ts        # Counter table structure
-├── queue-entry.entity.ts    # Queue entries table structure
-└── display-access-code.ts   # Display access codes table structure
-```
-
-### Core Application Files
-
-```
-├── main.ts              # Application entry point
-└── app.module.ts        # Root application module
-```
-
-### Feature Modules
-
-```
-modules/
-├── auth/               # Authentication module
-│   ├── dto/           # Data validation
-│   │   └── login.dto.ts
-│   ├── interfaces/    # TypeScript interfaces
-│   │   └── auth.interfaces.ts
-│   ├── auth.controller.ts   # Login endpoints
-│   ├── auth.service.ts      # Authentication logic
-│   ├── auth.module.ts       # Module configuration
-│   └── jwt.strategy.ts      # JWT handling
-│
-├── users/              # User management
-│   ├── users.service.ts    # User operations
-│   └── users.module.ts     # Module configuration
-│
-└── common/             # Shared code
-    ├── decorators/    # Custom decorators
-    ├── guards/        # Authentication guards
-    └── interfaces/    # Shared interfaces
-```
-
-### Database Migrations
-
-```
-migrations/
-└── 1738276871093-InitialSchema.ts    # Initial database structure
-```
-
-## Documentation (`docs/`)
+## Documentation
 
 ```
 docs/
-├── development-log.md              # Development progress log
-├── folder-structure.md            # This file
+├── development-log.md         # Development progress
+├── folder-structure.md        # Project structure
+├── task-completion.json       # Task tracking
 └── main-final/
-    ├── queue-system-backend-docs.md   # Main documentation
-    └── api-documentation-guide.md     # API documentation
+    ├── queue-system-backend-docs.md  # System documentation
+    └── api-documentation-guide.md    # API guide
 ```
-
-## Purpose of Key Files
-
-### Configuration
-
--   `database.config.ts`: Configures database connection for the application
--   `typeorm.config.ts`: Configures database for running migrations
--   `.env`: Stores environment variables (database credentials, JWT secret, etc.)
-
-### Core Files
-
--   `main.ts`: Bootstraps the NestJS application
--   `app.module.ts`: Root module that imports all other modules
-
-### Entities
-
--   `user.entity.ts`: Defines user table structure and relationships
--   `department.entity.ts`: Defines department table structure
--   `queue-entry.entity.ts`: Defines queue entry table structure
--   `counter.entity.ts`: Defines counter table structure
--   `display-access-code.entity.ts`: Defines display access codes structure
-
-### Authentication
-
--   `auth.controller.ts`: Handles login requests
--   `auth.service.ts`: Contains login logic
--   `jwt.strategy.ts`: Handles JWT token validation
--   `login.dto.ts`: Validates login request data
-
-### User Management
-
--   `users.service.ts`: Handles user operations (find, create, etc.)
--   `users.module.ts`: Configures user management module
-
-### Common
-
--   `roles.decorator.ts`: Handles role-based access control
--   `roles.guard.ts`: Validates user roles for endpoints
--   `jwt-payload.interface.ts`: Defines JWT token structure

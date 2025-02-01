@@ -42,7 +42,7 @@ export class QueueEntry {
 	@Column({type: "timestamp", nullable: true})
 	no_show_at: Date
 
-	@ManyToOne(() => Department)
+	@ManyToOne(() => Department, (department) => department.queueEntries)
 	@JoinColumn({name: "department_id"})
 	department: Department
 
