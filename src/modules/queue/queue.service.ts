@@ -1,4 +1,4 @@
-import {Injectable, NotFoundException, BadRequestException, InternalServerErrorException, Inject} from "@nestjs/common"
+import {Injectable, NotFoundException, BadRequestException, InternalServerErrorException} from "@nestjs/common"
 import {InjectRepository} from "@nestjs/typeorm"
 import {Repository, FindOptionsWhere, In, IsNull, EntityManager} from "typeorm"
 import {QueueEntry} from "./entities/queue-entry.entity"
@@ -7,7 +7,7 @@ import {Counter} from "../../entities/counter.entity"
 import {RegisterPatientDto} from "./dto/register-patient.dto"
 import {QueueStatus} from "./enums/queue-status.enum"
 import {QueueNumberService} from "./services/queue-number.service"
-import {MoreThanOrEqual, MoreThan} from "typeorm"
+import {MoreThanOrEqual} from "typeorm"
 import {CreateQueueDto} from "./dto/create-queue.dto"
 import {QueueGateway} from "./queue.gateway"
 import {CreateQueueEntryDto} from "./dto/create-queue-entry.dto"
@@ -30,7 +30,6 @@ export class QueueService {
 		@InjectRepository(Counter)
 		private counterRepository: Repository<Counter>,
 		private queueNumberService: QueueNumberService,
-		@Inject("QUEUE_GATEWAY")
 		private queueGateway: QueueGateway,
 		private readonly redisService: RedisService,
 		private readonly displayGateway: DisplayGateway,
@@ -116,12 +115,8 @@ export class QueueService {
 
 		const updated = await this.queueRepository.save(entry)
 
-		// Use new sync event emission
-		await this.queueGateway.emitQueueUpdate(
-			entry.departmentId,
-			updated,
-			status === QueueStatus.COMPLETED ? "COMPLETE" : "UPDATE"
-		)
+		// Emit via WebSocket
+		await this.queueGateway.emitStatusUpdate(entry.departmentId, updated)
 
 		return updated
 	}
@@ -326,48 +321,24 @@ export class QueueService {
 		})
 	}
 
-	async callNextPatient(departmentId: string, counterId: number): Promise<QueueEntry> {
-		const redis = this.redisService.getClient()
-		const nextEntryId = await redis.zrange(`dept:${departmentId}:queue`, 0, 0)
+	private async callNextPatient(departmentId: string, counterId: number): Promise<QueueEntry> {
+		const nextPatient = await this.queueRepository.findOne({
+			where: {
+				departmentId,
+				status: QueueStatus.WAITING,
+				counterId: IsNull(),
+			},
+			order: {
+				createdAt: "ASC",
+			},
+			relations: ["department"],
+		})
 
-		if (!nextEntryId.length) {
-			throw new NotFoundException("No patients in queue")
+		if (!nextPatient) {
+			throw new NotFoundException("No waiting patients in queue")
 		}
 
-		const entry = await this.queueRepository.findOne({
-			where: {id: nextEntryId[0]},
-		})
-
-		if (!entry) {
-			throw new NotFoundException("Queue entry not found")
-		}
-
-		entry.status = QueueStatus.SERVING
-		entry.counterId = counterId
-		const savedEntry = await this.queueRepository.save(entry)
-
-		// Remove from Redis queue
-		await redis.zrem(`dept:${departmentId}:queue`, entry.id)
-
-		// Emit via WebSocket for queue updates
-		await this.queueGateway.emitTicketCalled(departmentId, savedEntry)
-
-		// Emit for display screen
-		await this.displayGateway.emitDisplayUpdate(departmentId, {
-			queueNumber: entry.queueNumber,
-			patientName: entry.patientName,
-			counter: counterId,
-			status: "called",
-		})
-
-		// Emit announcement
-		await this.displayGateway.emitAnnouncement(departmentId, {
-			fileNumber: entry.fileNumber,
-			name: entry.patientName,
-			counter: counterId,
-		})
-
-		return savedEntry
+		return this.servePatient(nextPatient.id, counterId)
 	}
 
 	async callNumber(id: string): Promise<any> {
@@ -422,6 +393,7 @@ export class QueueService {
 		// Validate counter exists
 		const counter = await this.counterRepository.findOne({
 			where: {id: counterId},
+			relations: ["department"],
 		})
 		if (!counter) {
 			throw new NotFoundException(`Counter ${counterId} not found`)
@@ -429,9 +401,15 @@ export class QueueService {
 
 		const entry = await this.queueRepository.findOne({
 			where: {id},
+			relations: ["department"],
 		})
 		if (!entry) {
 			throw new NotFoundException("Queue entry not found")
+		}
+
+		// Validate department match
+		if (entry.departmentId !== counter.department.id) {
+			throw new BadRequestException("Counter does not belong to patient's department")
 		}
 
 		// Must have counter when serving
@@ -439,7 +417,10 @@ export class QueueService {
 		entry.status = QueueStatus.SERVING
 		entry.servedAt = new Date()
 
-		return this.queueRepository.save(entry)
+		const saved = await this.queueRepository.save(entry)
+		await this.queueGateway.emitStatusUpdate(entry.departmentId, saved)
+
+		return saved
 	}
 
 	async markNoShow(id: string): Promise<QueueEntry> {
@@ -473,13 +454,11 @@ export class QueueService {
 				counterId,
 				status: QueueStatus.SERVING,
 			},
+			relations: ["department", "counter"],
 		})
 
 		if (currentPatient) {
-			currentPatient.status = QueueStatus.COMPLETED
-			currentPatient.completedAt = new Date()
-			await this.queueRepository.save(currentPatient)
-			await this.queueGateway.emitStatusUpdate(departmentId, currentPatient)
+			await this.completePatient(currentPatient.id)
 		}
 
 		// Then call next patient
@@ -487,33 +466,56 @@ export class QueueService {
 	}
 
 	async getCounterQueueDetails(counterId: number, departmentId: string) {
-		// Get currently serving patient at this counter
+		// First get the counter and validate it belongs to the right department
+		const counter = await this.counterRepository.findOne({
+			where: {
+				id: counterId,
+				department_id: departmentId, // Add this condition
+			},
+			relations: ["department"],
+		})
+
+		if (!counter) {
+			throw new NotFoundException("Counter not found or does not belong to this department")
+		}
+
+		// Get currently serving patient at THIS counter only
 		const current = await this.queueRepository.findOne({
 			where: {
 				counterId,
+				departmentId, // Add department check
 				status: QueueStatus.SERVING,
 			},
+			relations: ["department"],
 		})
 
-		// Get waiting patients in staff's department
+		// Get waiting patients only from THIS department
 		const queue = await this.queueRepository.find({
 			where: {
-				departmentId,
+				departmentId, // This was correct but now more explicit
 				status: QueueStatus.WAITING,
-				counterId: IsNull(), // Not assigned to any counter yet
+				counterId: IsNull(),
 			},
 			order: {
 				createdAt: "ASC",
 			},
+			relations: ["department"],
 		})
 
 		return {
-			current,
-			queue,
-			counter: {
-				id: counterId,
-				departmentId,
-			},
+			current: current
+				? {
+						...current,
+						department: current.department,
+						counter: current.counterId ? counter : null,
+				  }
+				: null,
+			queue: queue.map((entry) => ({
+				...entry,
+				department: entry.department,
+				counter: entry.counterId ? counter : null,
+			})),
+			counter,
 		}
 	}
 
@@ -528,7 +530,7 @@ export class QueueService {
 	async completePatient(id: string): Promise<QueueEntry> {
 		const entry = await this.queueRepository.findOne({
 			where: {id},
-			relations: ["department"],
+			relations: ["department", "counter"],
 		})
 
 		if (!entry) {
@@ -536,7 +538,7 @@ export class QueueService {
 		}
 
 		// Validate counter assignment and status
-		await this.validateCounterAssignment(entry)
+		this.validateCounterAssignment(entry)
 		if (entry.status !== QueueStatus.SERVING) {
 			throw new BadRequestException("Can only complete patients that are being served")
 		}
@@ -722,54 +724,5 @@ export class QueueService {
 
 			return updatedEntry
 		})
-	}
-
-	async getEntriesAfterVersion(departmentId: string, lastVersion: number): Promise<QueueEntry[]> {
-		return this.queueRepository.find({
-			where: {
-				departmentId,
-				version: MoreThan(lastVersion),
-			},
-			order: {
-				version: "ASC",
-			},
-		})
-	}
-
-	@Cron("*/5 * * * *") // Every 5 minutes
-	async persistQueueStates() {
-		const departments = await this.departmentRepository.find()
-
-		for (const dept of departments) {
-			const entries = await this.queueRepository.find({
-				where: {
-					departmentId: dept.id,
-					status: In([QueueStatus.WAITING, QueueStatus.SERVING]),
-				},
-				order: {
-					createdAt: "ASC",
-				},
-			})
-
-			await this.redisService.saveQueueState(dept.id, entries)
-		}
-	}
-
-	async recoverQueueState(departmentId: string): Promise<void> {
-		const cachedState = await this.redisService.getQueueState(departmentId)
-		if (!cachedState) return
-
-		const currentEntries = await this.queueRepository.find({
-			where: {departmentId},
-			order: {version: "DESC"},
-			take: 1,
-		})
-
-		const latestVersion = currentEntries[0]?.version || 0
-		const cachedEntries = cachedState.entries.filter((e) => e.version > latestVersion)
-
-		if (cachedEntries.length > 0) {
-			await this.queueGateway.emitQueueUpdate(departmentId, cachedEntries[cachedEntries.length - 1], "UPDATE")
-		}
 	}
 }

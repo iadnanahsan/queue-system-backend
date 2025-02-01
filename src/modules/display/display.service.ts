@@ -33,8 +33,21 @@ export class DisplayService {
 		return this.displayAccessRepository.save(displayAccess)
 	}
 
-	async verifyAccessCode(code: string): Promise<DisplayAccess> {
-		const access = await this.displayAccessRepository.findOne({
+	async verifyAccessCode(code: string) {
+		// First check Redis if this code was already verified
+		const verificationKey = `display:verify:${code}`
+		const isVerified = await this.redisService.getClient().get(verificationKey)
+
+		if (isVerified) {
+			return {
+				message: "Code already verified",
+				verified: true,
+				displayAccess: JSON.parse(isVerified),
+			}
+		}
+
+		// If not in Redis, check database
+		const displayAccess = await this.displayAccessRepository.findOne({
 			where: {
 				access_code: code,
 				is_active: true,
@@ -42,15 +55,23 @@ export class DisplayService {
 			relations: ["department"],
 		})
 
-		if (!access) {
+		if (!displayAccess) {
 			throw new NotFoundException("Invalid display access code")
 		}
 
-		// Store in Redis with TTL
-		const redis = this.redisService.getClient()
-		await redis.set(`display:verified:${code}`, "true", "EX", 86400) // 24 hours
+		// Store in Redis for future checks
+		await this.redisService.getClient().set(
+			verificationKey,
+			JSON.stringify(displayAccess),
+			"EX",
+			86400 // 24 hours
+		)
 
-		return access
+		return {
+			message: "Code verified successfully",
+			verified: true,
+			displayAccess,
+		}
 	}
 
 	private async isCodeVerified(code: string): Promise<boolean> {

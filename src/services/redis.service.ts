@@ -1,14 +1,11 @@
 import {Injectable, OnModuleDestroy} from "@nestjs/common"
 import Redis from "ioredis"
 import {ConfigService} from "@nestjs/config"
-import {QueueEntry} from "../modules/queue/entities/queue-entry.entity"
 
 @Injectable()
 export class RedisService implements OnModuleDestroy {
 	private readonly redis: Redis
 	private readonly keyPrefix = "queue:"
-	private readonly QUEUE_STATE_PREFIX = "queue:state:"
-	private readonly QUEUE_STATE_TTL = 24 * 60 * 60 // 24 hours
 
 	constructor(private configService: ConfigService) {
 		this.redis = new Redis({
@@ -36,31 +33,6 @@ export class RedisService implements OnModuleDestroy {
 		if (keys.length) {
 			await this.redis.del(...keys)
 		}
-	}
-
-	private getQueueStateKey(departmentId: string): string {
-		return `${this.QUEUE_STATE_PREFIX}${departmentId}`
-	}
-
-	async saveQueueState(departmentId: string, entries: QueueEntry[]): Promise<void> {
-		const key = this.getQueueStateKey(departmentId)
-		await this.redis.setex(
-			key,
-			this.QUEUE_STATE_TTL,
-			JSON.stringify({
-				timestamp: Date.now(),
-				entries: entries,
-			})
-		)
-	}
-
-	async getQueueState(departmentId: string): Promise<{
-		timestamp: number
-		entries: QueueEntry[]
-	} | null> {
-		const key = this.getQueueStateKey(departmentId)
-		const data = await this.redis.get(key)
-		return data ? JSON.parse(data) : null
 	}
 
 	async onModuleDestroy() {

@@ -22,6 +22,7 @@ import {RolesGuard} from "../common/guards/roles.guard"
 import {Roles} from "../common/decorators/roles.decorator"
 import {UserRole} from "../users/enums/user-role.enum"
 import {UpdateCounterDto} from "./dto/update-counter.dto"
+import {UuidValidationPipe} from "../../common/pipes/validation.pipe"
 
 @ApiTags("counters")
 @Controller("counters")
@@ -48,7 +49,7 @@ export class CountersController {
 			return await this.countersService.findAll()
 		} catch (error) {
 			console.error("Error in findAll counters:", error)
-			throw new InternalServerErrorException(error.message || "Error fetching counters")
+			throw new InternalServerErrorException("Error fetching counters")
 		}
 	}
 
@@ -56,12 +57,17 @@ export class CountersController {
 	@HttpCode(HttpStatus.OK)
 	@ApiOperation({summary: "Get counters by department"})
 	@ApiResponse({status: HttpStatus.OK, description: "Retrieved department counters"})
-	async findByDepartment(@Param("departmentId") departmentId: string) {
+	async findByDepartment(@Param("departmentId", UuidValidationPipe) departmentId: string) {
 		try {
 			return await this.countersService.findByDepartment(departmentId)
 		} catch (error) {
 			console.error("Error fetching department counters:", error)
-			throw new InternalServerErrorException(error.message || "Error fetching department counters")
+
+			if (error instanceof NotFoundException) {
+				throw error
+			}
+
+			throw new InternalServerErrorException("Error fetching department counters")
 		}
 	}
 

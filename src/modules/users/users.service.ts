@@ -189,7 +189,7 @@ export class UsersService {
 		})
 	}
 
-	async findByUsername(username: string): Promise<User | undefined> {
+	async findByUsername(username: string): Promise<User | null> {
 		return this.usersRepository.findOne({where: {username}})
 	}
 
@@ -232,7 +232,7 @@ export class UsersService {
 			}
 
 			// Remove counter assignment when changing department
-			user.counter_id = null
+			user.counter_id = undefined
 		}
 
 		// Verify department exists

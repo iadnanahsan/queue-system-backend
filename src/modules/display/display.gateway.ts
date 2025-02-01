@@ -33,7 +33,7 @@ export class DisplayGateway implements OnGatewayConnection, OnGatewayDisconnect 
 		await client.join(`display:${accessCode}`)
 	}
 
-	// Called from QueueService when status changes
+	// Updates display screens
 	async emitDisplayUpdate(departmentId: string, displayData: any) {
 		this.server.to(`display:${departmentId}`).emit("display:update", {
 			queueNumber: displayData.queueNumber,
@@ -43,7 +43,7 @@ export class DisplayGateway implements OnGatewayConnection, OnGatewayDisconnect 
 		})
 	}
 
-	// For audio announcements
+	// For announcements
 	async emitAnnouncement(
 		departmentId: string,
 		data: {

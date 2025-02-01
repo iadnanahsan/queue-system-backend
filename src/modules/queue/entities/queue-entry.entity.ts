@@ -1,13 +1,4 @@
-import {
-	Entity,
-	PrimaryGeneratedColumn,
-	Column,
-	CreateDateColumn,
-	ManyToOne,
-	JoinColumn,
-	UpdateDateColumn,
-	VersionColumn,
-} from "typeorm"
+import {Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn} from "typeorm"
 import {Department} from "../../../entities/department.entity"
 import {Counter} from "../../../entities/counter.entity"
 import {QueueStatus} from "../enums/queue-status.enum"
@@ -58,10 +49,4 @@ export class QueueEntry {
 	@ManyToOne(() => Counter)
 	@JoinColumn({name: "counter_id"})
 	counter?: Counter
-
-	@VersionColumn()
-	version: number
-
-	@UpdateDateColumn()
-	updatedAt: Date
 }

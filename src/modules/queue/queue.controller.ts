@@ -25,6 +25,7 @@ import {ServePatientDto} from "./dto/serve-patient.dto"
 import {Request} from "express"
 import {JwtPayload} from "jsonwebtoken"
 import {GetQueueMetricsDto} from "./dto/get-queue-metrics.dto"
+import {UuidValidationPipe} from "../../common/pipes/validation.pipe"
 
 @ApiTags("queue")
 @Controller("queue")
@@ -102,15 +103,6 @@ export class QueueController {
 		}
 	}
 
-	@Put("next/:departmentId/:counterId")
-	@Roles("counter_staff")
-	@HttpCode(HttpStatus.OK)
-	@ApiOperation({summary: "Call next patient"})
-	@ApiResponse({status: HttpStatus.OK, description: "Next patient called"})
-	async callNextPatient(@Param("departmentId") departmentId: string, @Param("counterId") counterId: number) {
-		return this.queueService.callNextPatient(departmentId, counterId)
-	}
-
 	@Post(":id/call")
 	@Roles("counter_staff")
 	@ApiOperation({
@@ -153,7 +145,7 @@ export class QueueController {
 			if (error instanceof NotFoundException) {
 				throw error
 			}
-			throw new InternalServerErrorException(error.message || "Could not process call request")
+			throw new InternalServerErrorException((error as Error).message || "Could not process call request")
 		}
 	}
 
@@ -222,7 +214,10 @@ export class QueueController {
 		summary: "Complete current patient and call next",
 		description: "Completes the current patient (if any) and calls the next patient in queue",
 	})
-	async completeAndCallNext(@Param("departmentId") departmentId: string, @Param("counterId") counterId: number) {
+	async completeAndCallNext(
+		@Param("departmentId", UuidValidationPipe) departmentId: string,
+		@Param("counterId") counterId: number
+	) {
 		return this.queueService.completeAndCallNext(departmentId, counterId)
 	}
 

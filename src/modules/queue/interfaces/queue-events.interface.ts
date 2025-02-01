@@ -1,3 +1,6 @@
+import {QueueEntry} from "../entities/queue-entry.entity"
+import {QueueStatus} from "../enums/queue-status.enum"
+
 export interface QueueEvents {
 	// When new patient is registered
 	"queue:new": {

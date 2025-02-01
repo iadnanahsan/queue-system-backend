@@ -5,6 +5,7 @@ import {AppModule} from "./app.module"
 import {ValidationPipe} from "@nestjs/common"
 import {SeedService} from "./modules/seed/seed.service"
 import {corsConfig} from "./config/cors.config"
+import {InvalidUuidFilter} from "./common/filters/invalid-uuid.filter"
 
 import * as net from "net"
 
@@ -48,8 +49,17 @@ async function bootstrap() {
 	// Enable CORS with configuration
 	app.enableCors(corsConfig())
 
-	// Validation
-	app.useGlobalPipes(new ValidationPipe())
+	// Apply global filters
+	app.useGlobalFilters(new InvalidUuidFilter())
+
+	// Apply global pipes
+	app.useGlobalPipes(
+		new ValidationPipe({
+			transform: true,
+			whitelist: true,
+			forbidNonWhitelisted: true,
+		})
+	)
 
 	// Swagger Setup
 	const config = new DocumentBuilder()
@@ -77,6 +87,5 @@ async function bootstrap() {
 		console.error("Failed to start server:", error)
 		process.exit(1)
 	}
-
 }
 bootstrap()

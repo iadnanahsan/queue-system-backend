@@ -1,4 +1,4 @@
-import {Module} from "@nestjs/common"
+import {InternalServerErrorException, Module} from "@nestjs/common"
 import {TypeOrmModule} from "@nestjs/typeorm"
 import {CountersController} from "./counters.controller"
 import {CountersService} from "./counters.service"

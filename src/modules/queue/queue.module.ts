@@ -1,4 +1,4 @@
-import {Module, forwardRef} from "@nestjs/common"
+import {Module} from "@nestjs/common"
 import {TypeOrmModule} from "@nestjs/typeorm"
 import {QueueService} from "./queue.service"
 import {QueueController} from "./queue.controller"
@@ -25,16 +25,7 @@ import {DisplayModule} from "../display/display.module"
 		DisplayModule,
 	],
 	controllers: [QueueController],
-	providers: [
-		QueueService,
-		QueueGateway,
-		RedisService,
-		QueueNumberService,
-		{
-			provide: "QUEUE_GATEWAY",
-			useClass: QueueGateway,
-		},
-	],
-	exports: [QueueService, QueueGateway],
+	providers: [QueueService, QueueGateway, RedisService, QueueNumberService],
+	exports: [QueueService],
 })
 export class QueueModule {}

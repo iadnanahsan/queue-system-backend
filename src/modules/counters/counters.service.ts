@@ -53,10 +53,10 @@ export class CountersService {
 			const savedCounter = await this.countersRepository.save(counter)
 
 			// Return with department details
-			return await this.countersRepository.findOne({
+			return (await this.countersRepository.findOne({
 				where: {id: savedCounter.id},
 				relations: ["department"],
-			})
+			})) as Counter
 		} catch (error) {
 			if (error instanceof NotFoundException || error instanceof ConflictException) {
 				throw error

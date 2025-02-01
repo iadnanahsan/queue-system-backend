@@ -6,14 +6,11 @@ import {
 	OnGatewayDisconnect,
 } from "@nestjs/websockets"
 import {Server, Socket} from "socket.io"
-import {UseGuards, Injectable, Inject, forwardRef} from "@nestjs/common"
+import {UseGuards} from "@nestjs/common"
 import {WsJwtAuthGuard} from "../auth/guards/ws-jwt-auth.guard"
 import {QueueEntry} from "./entities/queue-entry.entity"
 import {QueueStatus} from "./enums/queue-status.enum"
-import {QueueSyncEvent, QueueSyncResponse} from "./interfaces/queue-sync.interface"
-import {QueueService} from "./queue.service"
 
-@Injectable()
 @WebSocketGateway({
 	cors: {
 		origin: "*",
@@ -24,14 +21,8 @@ export class QueueGateway implements OnGatewayConnection, OnGatewayDisconnect {
 	@WebSocketServer()
 	server: Server
 
-	constructor(
-		@Inject(forwardRef(() => QueueService))
-		private readonly queueService: QueueService
-	) {}
-
 	async handleConnection(client: Socket) {
 		console.log(`Client connected: ${client.id}`)
-		// Recovery will be triggered by client when ready
 	}
 
 	async handleDisconnect(client: Socket) {
@@ -45,15 +36,8 @@ export class QueueGateway implements OnGatewayConnection, OnGatewayDisconnect {
 	}
 
 	// Restore original methods
-	async emitQueueUpdate(departmentId: string, entry: QueueEntry, type: "UPDATE" | "NEW" | "COMPLETE" = "UPDATE") {
-		const syncEvent: QueueSyncEvent = {
-			entry,
-			timestamp: Date.now(),
-			version: entry.version,
-			type,
-		}
-
-		this.server.to(`department:${departmentId}`).emit("queue:sync", syncEvent)
+	async emitQueueUpdate(departmentId: string, queueData: any) {
+		this.server.to(`department-${departmentId}`).emit("queueUpdate", queueData)
 	}
 
 	async emitNewTicket(departmentId: string, ticket: any) {
@@ -84,36 +68,9 @@ export class QueueGateway implements OnGatewayConnection, OnGatewayDisconnect {
 		})
 	}
 
-	@SubscribeMessage("queue:checkSync")
-	async handleSyncCheck(client: Socket, data: {departmentId: string; lastVersion: number}) {
-		const {departmentId, lastVersion} = data
-
-		// Check if client needs sync
-		const latestEntries = await this.queueService.getEntriesAfterVersion(departmentId, lastVersion)
-
-		if (latestEntries.length > 0) {
-			// Send missing updates
-			latestEntries.forEach((entry) => {
-				this.emitQueueUpdate(departmentId, entry)
-			})
-		}
-
-		return {
-			success: true,
-			latestVersion: latestEntries[0]?.version || lastVersion,
-		}
-	}
-
-	@SubscribeMessage("queue:recover")
-	async handleRecovery(client: Socket, data: {departmentId: string}): Promise<QueueSyncResponse> {
-		try {
-			await this.queueService.recoverQueueState(data.departmentId)
-			return {success: true}
-		} catch (error) {
-			return {
-				success: false,
-				message: "Recovery failed",
-			}
-		}
-	}
+	// Real-time updates for:
+	// - New tickets (when reception registers)
+	// - Status changes (waiting → serving → completed)
+	// - Counter assignments
+	// - No-show marking
 }
