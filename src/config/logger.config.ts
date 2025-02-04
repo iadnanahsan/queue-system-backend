@@ -1,35 +1,32 @@
 import {createLogger, format, transports} from "winston"
-import * as DailyRotateFile from "winston-daily-rotate-file"
+import DailyRotateFile = require("winston-daily-rotate-file")
 import * as path from "path"
 
 const logDir = "logs"
 
-export const consoleLogger = createLogger({
-	format: format.combine(
-		format.timestamp({format: "YYYY-MM-DD HH:mm:ss"}),
-		format.colorize(),
-		format.printf(({timestamp, level, message}) => {
-			// Clean up ANSI escape codes and format message
-			const cleanMessage = String(message)
-				.replace(/\u001b\[\d+m/g, "")
-				// Simplify SQL queries
-				.replace(/\s+/g, " ")
-				.trim()
-			return `${timestamp} | ${level} | ${cleanMessage}`
-		})
-	),
-	transports: [
-		// Console output
-		new transports.Console(),
-		// Daily rotating file
-		new DailyRotateFile({
-			filename: path.join(logDir, "console-%DATE%.log"),
-			datePattern: "YYYY-MM-DD",
-			zippedArchive: true,
-			maxSize: "20m",
-			maxFiles: "14d",
-			// Clean format for file
-			format: format.uncolorize(),
-		}),
-	],
+const {combine, timestamp, printf} = format
+
+const myFormat = printf(({level, message, timestamp}) => {
+	return `${timestamp} ${level}: ${message}`
+})
+
+export const loggerConfig = {
+	// File transport
+	fileTransport: new transports.DailyRotateFile({
+		filename: path.join(logDir, "console-%DATE%.log"),
+		datePattern: "YYYY-MM-DD",
+		zippedArchive: true,
+		maxSize: "20m",
+		maxFiles: "14d",
+		format: combine(timestamp(), myFormat),
+	}),
+
+	// Console transport
+	consoleTransport: new transports.Console({
+		format: combine(timestamp(), myFormat),
+	}),
+}
+
+export const logger = createLogger({
+	transports: [loggerConfig.fileTransport, loggerConfig.consoleTransport],
 })

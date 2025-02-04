@@ -1,4 +1,4 @@
-import {Factory, Seeder} from "typeorm-seeding"
+import {Factory, Seeder} from "@jorgebodega/typeorm-seeding"
 import {Connection} from "typeorm"
 import {Department} from "../../entities/department.entity"
 import {User} from "../../entities/user.entity"

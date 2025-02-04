@@ -17,10 +17,12 @@ import {DisplayGateway} from "../display/display.gateway"
 import {ALLOWED_STATUS_TRANSITIONS, STATUS_ACTIONS} from "./constants/status-transitions"
 import {GetQueueMetricsDto} from "./dto/get-queue-metrics.dto"
 import {User} from "../../entities/user.entity"
+import {RedisQueueMetrics} from "./dto/queue-metrics.dto"
 
 @Injectable()
 export class QueueService {
 	private readonly LOCK_TTL = 5 // 5 seconds TTL for lock
+	private readonly QUEUE_KEY_PREFIX = "dept:" // Using existing prefix pattern
 
 	constructor(
 		@InjectRepository(QueueEntry)
@@ -91,32 +93,30 @@ export class QueueService {
 	async updateStatus(id: string, status: QueueStatus): Promise<QueueEntry> {
 		const entry = await this.queueRepository.findOne({
 			where: {id},
-			relations: ["department"],
+			relations: ["department", "counter"],
 		})
 
 		if (!entry) {
 			throw new NotFoundException("Queue entry not found")
 		}
 
-		entry.status = status
+		// Update status and handle counter
+		const updated = await this.queueRepository.save({
+			...entry,
+			status,
+			counterId: status === QueueStatus.COMPLETED ? null : entry.counterId,
+		})
 
-		// Add timestamps based on status
-		switch (status) {
-			case QueueStatus.SERVING:
-				entry.servedAt = new Date()
-				break
-			case QueueStatus.COMPLETED:
-				entry.completedAt = new Date()
-				break
-			case QueueStatus.NO_SHOW:
-				entry.noShowAt = new Date()
-				break
-		}
-
-		const updated = await this.queueRepository.save(entry)
-
-		// Emit via WebSocket
-		await this.queueGateway.emitStatusUpdate(entry.departmentId, updated)
+		// Emit to both gateways
+		await Promise.all([
+			this.queueGateway.emitStatusUpdate(entry.departmentId, updated),
+			this.displayGateway.emitDisplayUpdate(entry.departmentId, {
+				queueNumber: updated.queueNumber,
+				patientName: updated.patientName,
+				counter: updated.counter?.number,
+				status: updated.status,
+			}),
+		])
 
 		return updated
 	}
@@ -203,6 +203,34 @@ export class QueueService {
 		await redis.del(lockKey)
 	}
 
+	// 1. Queue key helper - using existing pattern from RedisService
+	private getQueueKey(departmentId: string): string {
+		return this.redisService.getDepartmentQueueKey(departmentId)
+	}
+
+	// 2. Add error handling to Redis queue add
+	private async addToRedisQueue(departmentId: string, queueEntry: QueueEntry) {
+		try {
+			const key = this.getQueueKey(departmentId)
+			const score = new Date(queueEntry.createdAt).getTime()
+			await this.redisService.zadd(key, score, queueEntry.id)
+		} catch (error) {
+			console.error("Redis add queue error:", error)
+			// Don't throw - allow operation to continue even if Redis fails
+		}
+	}
+
+	// 3. Add Redis remove function
+	private async removeFromRedisQueue(departmentId: string, queueId: string) {
+		try {
+			const key = this.getQueueKey(departmentId)
+			await this.redisService.zrem(key, queueId)
+		} catch (error) {
+			console.error("Redis remove error:", error)
+			// Don't throw - allow operation to continue
+		}
+	}
+
 	async registerPatient(createQueueEntryDto: CreateQueueEntryDto): Promise<QueueEntry> {
 		const lockKey = `register:${createQueueEntryDto.department_id}:${createQueueEntryDto.file_number}`
 
@@ -259,6 +287,9 @@ export class QueueService {
 
 			await this.queueGateway.emitNewTicket(createQueueEntryDto.department_id, savedEntry)
 
+			// Add to Redis after successful DB save
+			await this.addToRedisQueue(createQueueEntryDto.department_id, savedEntry)
+
 			return savedEntry
 		} catch (error) {
 			console.error("Error registering patient:", error)
@@ -273,23 +304,44 @@ export class QueueService {
 
 	@Cron("0 0 * * *")
 	async handleDailyCleanup() {
+		const startTime = Date.now()
 		const redis = this.redisService.getClient()
-		const departments = await this.departmentRepository.find()
-		const today = new Date()
-		today.setHours(0, 0, 0, 0)
+		let totalRemoved = 0
 
-		const pipeline = redis.pipeline()
-		for (const dept of departments) {
-			const queueKey = this.redisService.getDepartmentQueueKey(dept.id)
-			pipeline.zremrangebyscore(queueKey, 0, today.getTime())
+		try {
+			const departments = await this.departmentRepository.find()
+
+			for (const dept of departments) {
+				const queueKey = `dept:${dept.id}:queue`
+				const beforeCount = await redis.zcard(queueKey)
+
+				// Remove entries older than 24 hours
+				const cutoff = Date.now() - 24 * 60 * 60 * 1000
+				await redis.zremrangebyscore(queueKey, 0, cutoff)
+
+				const afterCount = await redis.zcard(queueKey)
+				totalRemoved += beforeCount - afterCount
+			}
+
+			// Store cleanup metrics
+			await redis.set(
+				"queue:cleanup:last",
+				JSON.stringify({
+					lastCleanup: new Date(),
+					keysRemoved: totalRemoved,
+				})
+			)
+		} catch (error) {
+			console.error("Daily cleanup failed:", error)
+			throw error
 		}
-		await pipeline.exec()
 	}
 
 	async getDepartmentQueue(departmentId: string): Promise<QueueEntry[]> {
 		// First verify department exists
 		const department = await this.departmentRepository.findOne({
 			where: {id: departmentId},
+			relations: ["counters"],
 		})
 
 		if (!department) {
@@ -306,19 +358,25 @@ export class QueueService {
 		const entryIds = await redis.zrange(`dept:${departmentId}:queue`, 0, -1)
 
 		if (!entryIds.length) {
-			return [] // Return empty array if no entries
+			return []
 		}
 
-		const where: FindOptionsWhere<QueueEntry> = {
-			id: In(entryIds),
-		}
-
-		return this.queueRepository.find({
-			where,
+		const entries = await this.queueRepository.find({
+			where: {
+				id: In(entryIds),
+			},
+			relations: ["department", "counter"],
 			order: {
 				createdAt: "ASC",
 			},
 		})
+
+		// Add department and counter names to each entry
+		return entries.map((entry) => ({
+			...entry,
+			departmentName: entry.department?.name_en,
+			counterNo: entry.counter?.number,
+		}))
 	}
 
 	private async callNextPatient(departmentId: string, counterId: number): Promise<QueueEntry> {
@@ -367,6 +425,7 @@ export class QueueService {
 		// Emit call event via WebSocket for audio
 		await this.displayGateway.emitAnnouncement(entry.departmentId, {
 			fileNumber: entry.fileNumber,
+			queueNumber: entry.queueNumber,
 			name: entry.patientName,
 			counter: entry.counter.number,
 		})
@@ -401,7 +460,7 @@ export class QueueService {
 
 		const entry = await this.queueRepository.findOne({
 			where: {id},
-			relations: ["department"],
+			relations: ["department", "counter"],
 		})
 		if (!entry) {
 			throw new NotFoundException("Queue entry not found")
@@ -417,10 +476,12 @@ export class QueueService {
 		entry.status = QueueStatus.SERVING
 		entry.servedAt = new Date()
 
-		const saved = await this.queueRepository.save(entry)
-		await this.queueGateway.emitStatusUpdate(entry.departmentId, saved)
-
-		return saved
+		// Get fully loaded entry with counter
+		const updated = await this.queueRepository.save(entry)
+		return this.queueRepository.findOne({
+			where: {id},
+			relations: ["department", "counter"],
+		})
 	}
 
 	async markNoShow(id: string): Promise<QueueEntry> {
@@ -441,13 +502,17 @@ export class QueueService {
 		entry.noShowAt = new Date()
 
 		const updated = await this.queueRepository.save(entry)
+
+		// Add Redis cleanup
+		await this.removeFromRedisQueue(entry.departmentId, entry.id)
+
 		await this.queueGateway.emitStatusUpdate(entry.departmentId, updated)
 
 		return updated
 	}
 
-	async completeAndCallNext(departmentId: string, counterId: number): Promise<QueueEntry> {
-		// First complete current patient if any
+	async completeAndCallNext(departmentId: string, counterId: number) {
+		// 1. Find current patient
 		const currentPatient = await this.queueRepository.findOne({
 			where: {
 				departmentId,
@@ -458,11 +523,44 @@ export class QueueService {
 		})
 
 		if (currentPatient) {
-			await this.completePatient(currentPatient.id)
+			// Complete current patient but keep counterId for records
+			await this.queueRepository.save({
+				...currentPatient,
+				status: QueueStatus.COMPLETED,
+				completedAt: new Date(),
+			})
+
+			// Remove from Redis
+			await this.removeFromRedisQueue(departmentId, currentPatient.id)
 		}
 
-		// Then call next patient
-		return this.callNextPatient(departmentId, counterId)
+		// Use existing functions for next patient
+		const nextPatient = await this.queueRepository.findOne({
+			where: {
+				departmentId,
+				status: QueueStatus.WAITING,
+				counterId: IsNull(),
+			},
+			order: {
+				createdAt: "ASC",
+			},
+			relations: ["department", "counter"],
+		})
+
+		if (!nextPatient) {
+			throw new NotFoundException("No waiting patients")
+		}
+
+		const served = await this.servePatient(nextPatient.id, counterId)
+
+		// Single emit here
+		await this.queueGateway.emitStatusUpdate(departmentId, served)
+		await this.queueGateway.emitNextPatient(departmentId, currentPatient, served)
+
+		return {
+			completed: currentPatient,
+			next: served,
+		}
 	}
 
 	async getCounterQueueDetails(counterId: number, departmentId: string) {
@@ -547,6 +645,10 @@ export class QueueService {
 		entry.completedAt = new Date()
 
 		const updated = await this.queueRepository.save(entry)
+
+		// Add Redis cleanup
+		await this.removeFromRedisQueue(entry.departmentId, entry.id)
+
 		await this.queueGateway.emitStatusUpdate(entry.departmentId, updated)
 
 		return updated
@@ -724,5 +826,127 @@ export class QueueService {
 
 			return updatedEntry
 		})
+	}
+
+	async getRedisMetrics(): Promise<RedisQueueMetrics> {
+		const redis = this.redisService.getClient()
+
+		// Get all queue keys
+		const queuePattern = "dept:*:queue"
+		const queueKeys = await redis.keys(queuePattern)
+
+		// Get all display verify keys
+		const displayPattern = "display:verify:*"
+		const displayKeys = await redis.keys(displayPattern)
+
+		return {
+			queueKeys: queueKeys.length,
+			displayVerifyKeys: displayKeys.length,
+		}
+	}
+
+	async noShowAndCallNext(departmentId: string, counterId: number) {
+		// 1. Find current patient
+		const currentPatient = await this.queueRepository.findOne({
+			where: {
+				departmentId,
+				counterId,
+				status: QueueStatus.SERVING,
+			},
+			relations: ["department", "counter"],
+		})
+
+		if (currentPatient) {
+			// Mark no-show but keep counterId for records
+			await this.queueRepository.save({
+				...currentPatient,
+				status: QueueStatus.NO_SHOW,
+				noShowAt: new Date(),
+			})
+
+			// Remove from Redis
+			await this.removeFromRedisQueue(departmentId, currentPatient.id)
+		}
+
+		// Use existing functions for next patient
+		const nextPatient = await this.queueRepository.findOne({
+			where: {
+				departmentId,
+				status: QueueStatus.WAITING,
+				counterId: IsNull(),
+			},
+			order: {
+				createdAt: "ASC",
+			},
+			relations: ["department", "counter"],
+		})
+
+		if (!nextPatient) {
+			throw new NotFoundException("No waiting patients")
+		}
+
+		const served = await this.servePatient(nextPatient.id, counterId)
+		await this.queueGateway.emitNextPatient(departmentId, currentPatient, served)
+
+		return {
+			noShow: currentPatient,
+			next: served,
+		}
+	}
+
+	// Check Redis health
+	private async checkRedisHealth(): Promise<boolean> {
+		try {
+			const client = this.redisService.getClient()
+			await client.ping()
+			return true
+		} catch (error) {
+			console.error("Redis health check failed:", error)
+			return false
+		}
+	}
+
+	async updateEntryStatus(entryId: string, status: string, counterId?: number): Promise<QueueEntry> {
+		console.log("Updating entry status:", {entryId, status, counterId})
+
+		// Get entry with counter relation
+		const entry = await this.queueRepository.findOne({
+			where: {id: entryId},
+			relations: ["counter"], // Make sure counter is loaded
+		})
+
+		console.log("Found entry:", entry)
+
+		if (!entry) {
+			throw new NotFoundException("Queue entry not found")
+		}
+
+		// Update status and counter
+		entry.status = status as QueueStatus
+		if (status === "serving" && counterId) {
+			console.log("Setting counter:", counterId)
+			entry.counterId = counterId
+
+			// Load and verify counter
+			const counter = await this.counterRepository.findOne({
+				where: {id: counterId},
+			})
+			console.log("Found counter:", counter)
+
+			entry.counter = counter
+		}
+
+		// Save and verify
+		const saved = await this.queueRepository.save(entry)
+		console.log("Saved entry:", saved)
+
+		// Reload to verify relations
+		const reloaded = await this.queueRepository.findOne({
+			where: {id: entryId},
+			relations: ["counter"],
+		})
+		console.log("Reloaded entry:", reloaded)
+
+		return reloaded
 	}
 }

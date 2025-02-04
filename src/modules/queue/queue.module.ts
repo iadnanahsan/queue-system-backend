@@ -26,6 +26,6 @@ import {DisplayModule} from "../display/display.module"
 	],
 	controllers: [QueueController],
 	providers: [QueueService, QueueGateway, RedisService, QueueNumberService],
-	exports: [QueueService],
+	exports: [QueueService, QueueGateway],
 })
 export class QueueModule {}

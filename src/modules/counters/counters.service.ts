@@ -147,15 +147,23 @@ export class CountersService {
 		return counters[0]
 	}
 
-	async assignCounter(counterId: number, userId: string): Promise<void> {
+	async assignCounter(counterId: number, userId: string) {
 		const counter = await this.countersRepository.findOne({
 			where: {id: counterId},
+			select: ["id", "number", "is_active"],
 		})
 		if (!counter) {
-			throw new NotFoundException("Counter not found")
+			throw new NotFoundException(`Counter ${counterId} not found`)
 		}
 		if (!counter.is_active) {
-			throw new BadRequestException("Counter is not active")
+			throw new BadRequestException(`Counter ${counterId} is not active`)
+		}
+
+		// Return success response with counter info
+		return {
+			success: true,
+			counterId: counter.id,
+			counterNo: counter.number,
 		}
 	}
 

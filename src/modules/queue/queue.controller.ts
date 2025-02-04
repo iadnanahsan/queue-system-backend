@@ -149,50 +149,11 @@ export class QueueController {
 		}
 	}
 
-	@Post(":id/serve")
-	@Roles("counter_staff")
-	@ApiOperation({
-		summary: "Start serving patient",
-		description: "Assign counter and start serving the patient. Required first step before any status changes.",
-	})
-	@ApiResponse({
-		status: HttpStatus.OK,
-		description: "Patient now being served",
-		content: {
-			"application/json": {
-				example: {
-					id: "uuid",
-					queueNumber: "K008",
-					patientName: "John Doe",
-					status: "serving",
-					counterId: 1,
-					servedAt: "2024-01-31T10:00:00Z",
-				},
-			},
-		},
-	})
-	@ApiParam({
-		name: "id",
-		description: "Queue entry UUID",
-		example: "10cc4880-035e-4384-8841-5d6cf4d19cde",
-	})
-	@ApiResponse({
-		status: HttpStatus.NOT_FOUND,
-		description: "Queue entry not found",
-	})
-	@ApiResponse({
-		status: HttpStatus.BAD_REQUEST,
-		description: "Invalid counter ID or status transition",
-	})
-	async servePatient(@Param("id") id: string, @Body() dto: ServePatientDto) {
-		return this.queueService.servePatient(id, dto.counterId)
-	}
-
 	@Post(":id/complete")
 	@Roles("counter_staff")
 	@ApiOperation({
-		summary: "Complete patient service",
-		description: "Mark patient as completed. Requires patient to be in SERVING status.",
+		summary: "Complete current patient",
+		description: "Marks current patient as completed. Use when completing without calling next patient.",
 	})
 	async completePatient(@Param("id") id: string) {
 		return this.queueService.completePatient(id)
@@ -202,23 +163,33 @@ export class QueueController {
 	@Roles("counter_staff")
 	@ApiOperation({
 		summary: "Mark patient as no-show",
-		description: "Mark patient as no-show. Can be done for waiting or serving patients.",
+		description: "Marks patient as no-show. Use when marking no-show without calling next patient.",
 	})
 	async markNoShow(@Param("id") id: string) {
 		return this.queueService.markNoShow(id)
 	}
 
-	@Post("next/:departmentId/:counterId")
+	@Post("next-after-complete/:departmentId/:counterId")
 	@Roles("counter_staff")
 	@ApiOperation({
-		summary: "Complete current patient and call next",
-		description: "Completes the current patient (if any) and calls the next patient in queue",
+		summary: "Complete current and call next",
+		description: "Combined operation: Completes current patient and calls next patient to counter.",
 	})
-	async completeAndCallNext(
+	async completeAndCallNext(@Param("departmentId") departmentId: string, @Param("counterId") counterId: number) {
+		return this.queueService.completeAndCallNext(departmentId, counterId)
+	}
+
+	@Post("next-after-noshow/:departmentId/:counterId")
+	@Roles("counter_staff")
+	@ApiOperation({
+		summary: "Mark no-show and call next",
+		description: "Combined operation: Marks current as no-show and calls next patient to counter.",
+	})
+	async noShowAndCallNext(
 		@Param("departmentId", UuidValidationPipe) departmentId: string,
 		@Param("counterId") counterId: number
 	) {
-		return this.queueService.completeAndCallNext(departmentId, counterId)
+		return this.queueService.noShowAndCallNext(departmentId, counterId)
 	}
 
 	@Get("counter/queue")
@@ -272,5 +243,15 @@ export class QueueController {
 	})
 	async getDepartmentMetrics(@Query() dto: GetQueueMetricsDto) {
 		return this.queueService.getDepartmentMetrics(dto)
+	}
+
+	@Get("metrics/redis")
+	@Roles("admin")
+	@ApiOperation({
+		summary: "Get Redis queue metrics",
+		description: "Get metrics about queue keys in Redis (Admin only)",
+	})
+	async getRedisMetrics() {
+		return this.queueService.getRedisMetrics()
 	}
 }

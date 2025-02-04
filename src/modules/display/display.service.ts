@@ -1,4 +1,4 @@
-import {Injectable, NotFoundException, UnauthorizedException} from "@nestjs/common"
+import {Injectable, NotFoundException, UnauthorizedException, BadRequestException} from "@nestjs/common"
 import {InjectRepository} from "@nestjs/typeorm"
 import {Repository} from "typeorm"
 import {DisplayAccess} from "./entities/display-access.entity"
@@ -8,102 +8,120 @@ import {DepartmentQueueDisplay, MultiDepartmentDisplay} from "./interfaces/displ
 import {Department} from "../../entities/department.entity"
 import {ALL_DEPARTMENTS_ID} from "./constants/display.constants"
 import {UpdateDisplayCodeDto} from "./dto/update-display-code.dto"
+import {QueueEntry} from "../../entities/queue-entry.entity"
 
 @Injectable()
 export class DisplayService {
+	private readonly DISPLAY_PREFIX = "display:"
+
 	constructor(
 		@InjectRepository(DisplayAccess)
-		private displayAccessRepository: Repository<DisplayAccess>,
+		private displayAccessRepo: Repository<DisplayAccess>,
 		@InjectRepository(Department)
 		private departmentRepository: Repository<Department>,
-		private redisService: RedisService,
-		private displayGateway: DisplayGateway
+		@InjectRepository(QueueEntry)
+		private queueEntryRepository: Repository<QueueEntry>,
+		private redisService: RedisService
 	) {}
 
 	async generateAccessCode(departmentId: string): Promise<DisplayAccess> {
-		// Generate 6 character unique code
-		const code = Math.random().toString(36).substring(2, 8).toUpperCase()
+		// Check for existing active code for this department
+		const existingCode = await this.displayAccessRepo.findOne({
+			where: {
+				departmentId,
+				is_active: true,
+			},
+		})
 
-		const displayAccess = this.displayAccessRepository.create({
+		if (existingCode) {
+			throw new BadRequestException(
+				`Department already has an active code: ${existingCode.access_code}. Please deactivate it first or use the existing code.`
+			)
+		}
+
+		// Generate new code only if no active code exists
+		const code = Math.random().toString(36).substring(2, 8).toUpperCase()
+		const displayAccess = this.displayAccessRepo.create({
 			departmentId,
 			access_code: code,
 			is_active: true,
 		})
 
-		return this.displayAccessRepository.save(displayAccess)
+		return this.displayAccessRepo.save(displayAccess)
 	}
 
-	async verifyAccessCode(code: string) {
-		// First check Redis if this code was already verified
-		const verificationKey = `display:verify:${code}`
-		const isVerified = await this.redisService.getClient().get(verificationKey)
-
-		if (isVerified) {
-			return {
-				message: "Code already verified",
-				verified: true,
-				displayAccess: JSON.parse(isVerified),
-			}
-		}
-
-		// If not in Redis, check database
-		const displayAccess = await this.displayAccessRepository.findOne({
-			where: {
-				access_code: code,
-				is_active: true,
-			},
-			relations: ["department"],
-		})
-
-		if (!displayAccess) {
-			throw new NotFoundException("Invalid display access code")
-		}
-
-		// Store in Redis for future checks
-		await this.redisService.getClient().set(
-			verificationKey,
-			JSON.stringify(displayAccess),
-			"EX",
-			86400 // 24 hours
-		)
-
-		return {
-			message: "Code verified successfully",
-			verified: true,
-			displayAccess,
-		}
-	}
-
-	private async isCodeVerified(code: string): Promise<boolean> {
-		const redis = this.redisService.getClient()
-		return !!(await redis.get(`display:verified:${code}`))
-	}
-
-	async getDepartmentDisplay(departmentId: string, code: string): Promise<DepartmentQueueDisplay | null> {
-		const access = await this.displayAccessRepository.findOne({
+	async getDepartmentDisplay(departmentId: string, code: string): Promise<DepartmentQueueDisplay> {
+		// Fetch access directly without verification
+		const access = await this.displayAccessRepo.findOne({
 			where: {
 				access_code: code,
 				is_active: true,
 			},
 		})
 
-		// Allow access if code is for all departments or matches specific department
-		if (!access || (access.departmentId !== ALL_DEPARTMENTS_ID && access.departmentId !== departmentId)) {
+		// Allow access if code is for the specific department
+		if (!access || access.departmentId !== departmentId) {
 			throw new UnauthorizedException("Invalid access code for this department")
 		}
 
-		if (!(await this.isCodeVerified(code))) {
-			throw new UnauthorizedException("Invalid or expired access code")
-		}
+		// First try Redis
 		const redis = this.redisService.getClient()
-		const displayKey = `display:${departmentId}:current`
+		const displayKey = `${this.DISPLAY_PREFIX}${departmentId}:current`
+		const cachedDisplay = await redis.get(displayKey)
 
-		const currentDisplay = await redis.get(displayKey)
-		return currentDisplay ? JSON.parse(currentDisplay) : null
+		if (cachedDisplay) {
+			return JSON.parse(cachedDisplay)
+		}
+
+		// If not in Redis, get from database
+		const department = await this.departmentRepository.findOne({
+			where: {id: departmentId},
+		})
+
+		// Get serving patients from database
+		const serving = await this.queueEntryRepository.find({
+			where: {
+				department_id: departmentId,
+				status: "serving",
+			},
+			relations: ["counter"],
+		})
+
+		// Get waiting patients
+		const waiting = await this.queueEntryRepository.find({
+			where: {
+				department_id: departmentId,
+				status: "waiting",
+			},
+			order: {
+				created_at: "ASC",
+			},
+		})
+
+		// Format display data
+		const displayData = {
+			department: {
+				name_en: department.name_en,
+				name_ar: department.name_ar,
+			},
+			serving: serving.map((entry) => ({
+				counter: entry.counter?.number,
+				queueNumber: entry.queue_number,
+				patientName: entry.patient_name,
+				fileNumber: entry.file_number,
+				status: entry.status,
+			})),
+			waiting: waiting.map((entry) => entry.queue_number),
+		}
+
+		// Cache the result
+		await redis.set(displayKey, JSON.stringify(displayData), "EX", 300) // Cache for 5 minutes
+
+		return displayData
 	}
 
 	async getAllDepartmentsDisplay(code: string): Promise<MultiDepartmentDisplay[]> {
-		const access = await this.displayAccessRepository.findOne({
+		const access = await this.displayAccessRepo.findOne({
 			where: {
 				access_code: code,
 				is_active: true,
@@ -115,9 +133,6 @@ export class DisplayService {
 			throw new UnauthorizedException("This code cannot access all departments")
 		}
 
-		if (!(await this.isCodeVerified(code))) {
-			throw new UnauthorizedException("Invalid or expired access code")
-		}
 		const departments = await this.departmentRepository.find({
 			where: {is_active: true},
 			relations: ["counters"],
@@ -134,7 +149,10 @@ export class DisplayService {
 				name_ar: dept.name_ar,
 				queues: dept.counters.map((counter) => ({
 					counter: counter.number,
-					current: currentDisplay && currentDisplay.counter === counter.number ? currentDisplay : null,
+					current:
+						currentDisplay && currentDisplay.serving.some((serving) => serving.counter === counter.number)
+							? currentDisplay
+							: null,
 				})),
 			})
 		}
@@ -143,7 +161,7 @@ export class DisplayService {
 	}
 
 	async updateAccessCode(id: string, updateDto: UpdateDisplayCodeDto): Promise<DisplayAccess> {
-		const access = await this.displayAccessRepository.findOne({
+		const access = await this.displayAccessRepo.findOne({
 			where: {id},
 			relations: ["department"],
 		})
@@ -175,15 +193,53 @@ export class DisplayService {
 			access.departmentId = updateDto.department_id
 		}
 
-		return this.displayAccessRepository.save(access)
+		return this.displayAccessRepo.save(access)
 	}
 
 	async getAllAccessCodes(): Promise<DisplayAccess[]> {
-		return this.displayAccessRepository.find({
+		return this.displayAccessRepo.find({
 			relations: ["department"],
 			order: {
 				created_at: "DESC",
 			},
+		})
+	}
+
+	async getQueueDisplayByCode(code: string): Promise<DepartmentQueueDisplay> {
+		// First get and verify the display access
+		const displayAccess = await this.displayAccessRepo.findOne({
+			where: {
+				access_code: code,
+				is_active: true,
+			},
+			relations: ["department"],
+		})
+
+		if (!displayAccess) {
+			throw new NotFoundException("Invalid display access code")
+		}
+
+		// Get the display data using existing function
+		const displayData = await this.getDepartmentDisplay(displayAccess.department.id, code)
+
+		if (!displayData) {
+			// Initialize empty display data
+			return {
+				department: {
+					name_en: displayAccess.department.name_en,
+					name_ar: displayAccess.department.name_ar,
+				},
+				serving: [],
+				waiting: [],
+			}
+		}
+
+		return displayData
+	}
+
+	async getDisplayAccessByDepartment(departmentId: string): Promise<DisplayAccess> {
+		return this.displayAccessRepo.findOne({
+			where: {departmentId, is_active: true},
 		})
 	}
 }

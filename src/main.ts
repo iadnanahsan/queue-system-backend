@@ -6,6 +6,7 @@ import {ValidationPipe} from "@nestjs/common"
 import {SeedService} from "./modules/seed/seed.service"
 import {corsConfig} from "./config/cors.config"
 import {InvalidUuidFilter} from "./common/filters/invalid-uuid.filter"
+import {IoAdapter} from "@nestjs/platform-socket.io"
 
 import * as net from "net"
 
@@ -46,8 +47,16 @@ async function bootstrap() {
 		logger: ["error", "warn", "log", "debug", "verbose"],
 	})
 
-	// Enable CORS with configuration
-	app.enableCors(corsConfig())
+	// Add WebSocket adapter
+	app.useWebSocketAdapter(new IoAdapter(app))
+
+	// Enable CORS for WebSocket
+	app.enableCors({
+		origin: true,
+		methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+		credentials: true,
+		allowedHeaders: ["Authorization", "Content-Type"],
+	})
 
 	// Apply global filters
 	app.useGlobalFilters(new InvalidUuidFilter())
@@ -81,8 +90,8 @@ async function bootstrap() {
 	await seedService.seed()
 
 	try {
-		await app.listen(PORT)
-		console.log(`Application is running on port ${PORT}`)
+		await app.listen(process.env.PORT || PORT)
+		console.log(`Application is running on port ${process.env.PORT || PORT}`)
 	} catch (error) {
 		console.error("Failed to start server:", error)
 		process.exit(1)

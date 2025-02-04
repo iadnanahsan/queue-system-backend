@@ -6,6 +6,7 @@ import {ConfigService} from "@nestjs/config"
 export class RedisService implements OnModuleDestroy {
 	private readonly redis: Redis
 	private readonly keyPrefix = "queue:"
+	private client: Redis
 
 	constructor(private configService: ConfigService) {
 		this.redis = new Redis({
@@ -14,6 +15,7 @@ export class RedisService implements OnModuleDestroy {
 			password: this.configService.get("REDIS_PASSWORD"),
 			keyPrefix: this.keyPrefix,
 		})
+		this.client = this.redis
 	}
 
 	getClient(): Redis {
@@ -37,5 +39,21 @@ export class RedisService implements OnModuleDestroy {
 
 	async onModuleDestroy() {
 		await this.redis.quit()
+	}
+
+	async zadd(key: string, score: number, member: string) {
+		return this.client.zadd(key, score, member)
+	}
+
+	async zrem(key: string, ...members: string[]) {
+		return this.client.zrem(key, ...members)
+	}
+
+	async zrange(key: string, start: number, stop: number) {
+		return this.client.zrange(key, start, stop)
+	}
+
+	async del(key: string) {
+		return this.client.del(key)
 	}
 }
