@@ -27,29 +27,19 @@ export class UsersService {
 	) {}
 
 	private async validateCounterStaffAssignment(dto: CreateUserDto) {
-		if (!dto.counter_id || !dto.department_id) {
-			throw new BadRequestException("Counter staff requires both counter and department")
+		if (!dto.department_id) {
+			throw new BadRequestException("Counter staff requires department")
 		}
 
-		const counter = await this.counterRepository.findOne({
+		const department = await this.departmentRepository.findOne({
 			where: {
-				id: dto.counter_id,
-				department_id: dto.department_id,
+				id: dto.department_id,
 				is_active: true,
 			},
 		})
-		if (!counter) {
-			throw new BadRequestException("Invalid counter for department")
-		}
 
-		const existingStaff = await this.usersRepository.findOne({
-			where: {
-				counter_id: dto.counter_id,
-				is_active: true,
-			},
-		})
-		if (existingStaff) {
-			throw new BadRequestException("Counter already assigned to active staff")
+		if (!department) {
+			throw new BadRequestException("Invalid or inactive department")
 		}
 	}
 
