@@ -12,12 +12,15 @@ import {CreateCounterDto} from "./dto/create-counter.dto"
 import {DepartmentService} from "../departments/departments.service"
 import {UpdateCounterDto} from "./dto/update-counter.dto"
 import {Not} from "typeorm"
+import {User} from "../../entities/user.entity"
 
 @Injectable()
 export class CountersService {
 	constructor(
 		@InjectRepository(Counter)
 		private countersRepository: Repository<Counter>,
+		@InjectRepository(User)
+		private userRepository: Repository<User>,
 		private departmentService: DepartmentService
 	) {}
 
@@ -115,13 +118,28 @@ export class CountersService {
 				throw new NotFoundException(`Counter with ID ${id} not found`)
 			}
 
+			// If trying to deactivate
+			if (counter.is_active) {
+				// If currently active, we're deactivating
+				// Check if any user has this counter assigned
+				const assignedUser = await this.userRepository.findOne({
+					where: {
+						counter_id: id,
+					},
+				})
+
+				if (assignedUser) {
+					throw new BadRequestException(`Cannot deactivate counter while it is assigned to a user`)
+				}
+			}
+
 			// Toggle the active status
 			counter.is_active = !counter.is_active
 
 			// Save and return updated counter
 			return await this.countersRepository.save(counter)
 		} catch (error) {
-			if (error instanceof NotFoundException) {
+			if (error instanceof NotFoundException || error instanceof BadRequestException) {
 				throw error
 			}
 			console.error("Error toggling counter status:", error)
@@ -159,6 +177,11 @@ export class CountersService {
 			throw new BadRequestException(`Counter ${counterId} is not active`)
 		}
 
+		// Update user's counter_id
+		await this.userRepository.update(userId, {
+			counter_id: counterId,
+		})
+
 		// Return success response with counter info
 		return {
 			success: true,
@@ -174,6 +197,12 @@ export class CountersService {
 		if (!counter) {
 			throw new NotFoundException("Counter not found")
 		}
+
+		// Clear user's counter_id
+		await this.userRepository.update(userId, {
+			counter_id: null,
+		})
+
 		await this.countersRepository.save(counter)
 	}
 
@@ -186,6 +215,20 @@ export class CountersService {
 
 			if (!counter) {
 				throw new NotFoundException(`Counter with ID ${id} not found`)
+			}
+
+			// If trying to deactivate
+			if (updateCounterDto.is_active === false && counter.is_active === true) {
+				// Check if any user has this counter assigned
+				const assignedUser = await this.userRepository.findOne({
+					where: {
+						counter_id: id,
+					},
+				})
+
+				if (assignedUser) {
+					throw new BadRequestException(`Cannot deactivate counter while it is assigned to a user`)
+				}
 			}
 
 			// If updating department_id, check if department exists
@@ -221,7 +264,11 @@ export class CountersService {
 			// Save and return updated counter
 			return await this.countersRepository.save(counter)
 		} catch (error) {
-			if (error instanceof NotFoundException || error instanceof ConflictException) {
+			if (
+				error instanceof NotFoundException ||
+				error instanceof ConflictException ||
+				error instanceof BadRequestException
+			) {
 				throw error
 			}
 			console.error("Error updating counter:", error)

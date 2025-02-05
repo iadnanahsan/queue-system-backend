@@ -1,10 +1,18 @@
-import {Injectable, NotFoundException, InternalServerErrorException, ConflictException} from "@nestjs/common"
+import {
+	Injectable,
+	NotFoundException,
+	InternalServerErrorException,
+	ConflictException,
+	BadRequestException,
+} from "@nestjs/common"
 import {InjectRepository} from "@nestjs/typeorm"
 import {Repository} from "typeorm"
 import {Department} from "./entities/department.entity"
 import {CreateDepartmentDto} from "./dto/create-department.dto"
 import {UpdateDepartmentDto} from "./dto/update-department.dto"
 import {Counter} from "../../entities/counter.entity"
+import {User} from "../../entities/user.entity"
+import {UserRole} from "../users/enums/user-role.enum"
 
 @Injectable()
 export class DepartmentService {
@@ -12,7 +20,9 @@ export class DepartmentService {
 		@InjectRepository(Department)
 		private departmentRepository: Repository<Department>,
 		@InjectRepository(Counter)
-		private counterRepository: Repository<Counter>
+		private counterRepository: Repository<Counter>,
+		@InjectRepository(User)
+		private userRepository: Repository<User>
 	) {}
 
 	async create(createDepartmentDto: CreateDepartmentDto): Promise<Department> {
@@ -24,6 +34,11 @@ export class DepartmentService {
 
 			if (existingDepartment) {
 				throw new ConflictException(`Department prefix ${createDepartmentDto.prefix} already exists`)
+			}
+
+			// Set default active status if not provided
+			if (createDepartmentDto.is_active === undefined) {
+				createDepartmentDto.is_active = true
 			}
 
 			const department = this.departmentRepository.create(createDepartmentDto)
@@ -75,6 +90,22 @@ export class DepartmentService {
 		try {
 			const department = await this.findOne(id)
 
+			// If trying to deactivate
+			if (updateDepartmentDto.is_active === false && department.is_active === true) {
+				// Check for active counter staff
+				const activeStaff = await this.userRepository.count({
+					where: {
+						department_id: id,
+						role: UserRole.COUNTER_STAFF,
+						is_active: true,
+					},
+				})
+
+				if (activeStaff > 0) {
+					throw new BadRequestException("Cannot deactivate department with active counter staff")
+				}
+			}
+
 			// If prefix is being updated, check for uniqueness
 			if (updateDepartmentDto.prefix && updateDepartmentDto.prefix !== department.prefix) {
 				const existingDepartment = await this.departmentRepository.findOne({
@@ -89,7 +120,11 @@ export class DepartmentService {
 			return await this.departmentRepository.save(department)
 		} catch (error) {
 			console.error("Error updating department:", error)
-			if (error instanceof NotFoundException || error instanceof ConflictException) {
+			if (
+				error instanceof NotFoundException ||
+				error instanceof ConflictException ||
+				error instanceof BadRequestException
+			) {
 				throw error
 			}
 			throw new InternalServerErrorException("Error updating department")

@@ -9,6 +9,7 @@ import {Department} from "../../entities/department.entity"
 import {ALL_DEPARTMENTS_ID} from "./constants/display.constants"
 import {UpdateDisplayCodeDto} from "./dto/update-display-code.dto"
 import {QueueEntry} from "../../entities/queue-entry.entity"
+import {In} from "typeorm"
 
 @Injectable()
 export class DisplayService {
@@ -170,18 +171,33 @@ export class DisplayService {
 			throw new NotFoundException("Display access code not found")
 		}
 
-		// If regenerating code
+		// If trying to deactivate
+		if (updateDto.is_active === false && access.is_active === true) {
+			// Check for active queues in the department
+			const activeQueues = await this.queueEntryRepository.count({
+				where: {
+					department_id: access.departmentId,
+					status: In(["waiting", "serving"]), // Using string literals to match existing code
+				},
+			})
+
+			if (activeQueues > 0) {
+				throw new BadRequestException(
+					"Cannot deactivate display code while there are active queues in the department"
+				)
+			}
+		}
+
+		// Keep existing functionality
 		if (updateDto.regenerate) {
 			access.access_code = Math.random().toString(36).substring(2, 8).toUpperCase()
 		}
 
-		// Update other fields if provided
 		if (updateDto.is_active !== undefined) {
 			access.is_active = updateDto.is_active
 		}
 
 		if (updateDto.department_id) {
-			// If not "all", verify department exists
 			if (updateDto.department_id !== ALL_DEPARTMENTS_ID) {
 				const department = await this.departmentRepository.findOne({
 					where: {id: updateDto.department_id},

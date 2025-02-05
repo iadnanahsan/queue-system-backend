@@ -18,13 +18,13 @@ export class AuthService {
 		private userRepository: Repository<User>
 	) {}
 
-	async validateUser(loginDto: LoginDto): Promise<User> {
-		const user = await this.usersService.findByUsername(loginDto.username)
-		if (!user) {
-			throw new UnauthorizedException("Invalid credentials")
+	async validateUser(username: string, password: string): Promise<any> {
+		const user = await this.usersService.findByUsername(username)
+		if (!user || !user.is_active) {
+			throw new UnauthorizedException("Invalid credentials or inactive user")
 		}
 
-		const isPasswordValid = await bcrypt.compare(loginDto.password, user.password_hash)
+		const isPasswordValid = await bcrypt.compare(password, user.password_hash)
 		if (!isPasswordValid) {
 			throw new UnauthorizedException("Invalid credentials")
 		}
@@ -33,7 +33,7 @@ export class AuthService {
 	}
 
 	async login(loginDto: LoginDto): Promise<LoginResponse> {
-		const user = await this.validateUser(loginDto)
+		const user = await this.validateUser(loginDto.username, loginDto.password)
 		if (!user) {
 			throw new UnauthorizedException("Invalid credentials")
 		}

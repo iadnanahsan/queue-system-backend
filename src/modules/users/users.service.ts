@@ -207,15 +207,19 @@ export class UsersService {
 		return this.usersRepository.findOne({where: {username}})
 	}
 
-	async toggleUserStatus(userId: string) {
-		const user = await this.usersRepository.findOne({
-			where: {id: userId},
-		})
+	async toggleUserStatus(id: string): Promise<User> {
+		const user = await this.findById(id)
 
 		if (!user) {
 			throw new NotFoundException("User not found")
 		}
 
+		// Prevent admin from deactivating themselves
+		if (user.role === UserRole.ADMIN) {
+			throw new BadRequestException("Cannot deactivate admin account")
+		}
+
+		// Check for active queues before deactivating counter staff
 		if (user.role === UserRole.COUNTER_STAFF && user.is_active && user.counter_id) {
 			const hasActiveQueues = await this.queueRepository.count({
 				where: {

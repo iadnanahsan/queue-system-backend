@@ -1,23 +1,35 @@
-import {IsString, Length, IsBoolean, IsOptional} from "class-validator"
-import {ApiProperty} from "@nestjs/swagger"
+import {IsString, IsNotEmpty, IsBoolean, IsOptional} from "class-validator"
+import {ApiProperty, ApiPropertyOptional} from "@nestjs/swagger"
 
 export class CreateDepartmentDto {
-	@ApiProperty({example: "Radiology"})
+	@ApiProperty({
+		description: "Department name in English",
+		example: "Cardiology",
+	})
 	@IsString()
-	@Length(2, 100)
+	@IsNotEmpty()
 	name_en: string
 
-	@ApiProperty({example: "قسم الأشعة"})
+	@ApiProperty({
+		description: "Department name in Arabic",
+		example: "قسم القلب",
+	})
 	@IsString()
-	@Length(2, 100)
+	@IsNotEmpty()
 	name_ar: string
 
-	@ApiProperty({example: "R"})
+	@ApiProperty({
+		description: "Department prefix for queue numbers",
+		example: "C",
+	})
 	@IsString()
-	@Length(1, 1)
+	@IsNotEmpty()
 	prefix: string
 
-	@ApiProperty({example: true, required: false})
+	@ApiPropertyOptional({
+		description: "Department active status",
+		default: true,
+	})
 	@IsBoolean()
 	@IsOptional()
 	is_active?: boolean = true

@@ -23,15 +23,31 @@ export class DisplayGateway implements OnGatewayConnection, OnGatewayDisconnect 
 	@WebSocketServer()
 	server: Server
 
+	private connectedDisplays = new Map<string, Set<string>>() // code -> Set of socket IDs
+
 	private debug(message: string, ...args: any[]) {
 		console.log(`[DisplayGateway] ${message}`, ...args)
 	}
 
 	async handleConnection(client: Socket) {
+		const code = client.handshake.query.code as string
+		if (code) {
+			if (!this.connectedDisplays.has(code)) {
+				this.connectedDisplays.set(code, new Set())
+			}
+			this.connectedDisplays.get(code).add(client.id)
+		}
 		this.debug(`Display client connected: ${client.id}`)
 	}
 
 	async handleDisconnect(client: Socket) {
+		const code = client.handshake.query.code as string
+		if (code && this.connectedDisplays.has(code)) {
+			this.connectedDisplays.get(code).delete(client.id)
+			if (this.connectedDisplays.get(code).size === 0) {
+				this.connectedDisplays.delete(code)
+			}
+		}
 		console.log(`Display client disconnected: ${client.id}`)
 	}
 
@@ -100,5 +116,10 @@ export class DisplayGateway implements OnGatewayConnection, OnGatewayDisconnect 
 		} catch (error) {
 			this.debug(`Error emitting announcement: ${error}`)
 		}
+	}
+
+	// Add this method to check for active connections
+	async hasActiveConnections(code: string): Promise<boolean> {
+		return this.connectedDisplays.has(code) && this.connectedDisplays.get(code).size > 0
 	}
 }
