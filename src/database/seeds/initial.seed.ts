@@ -1,58 +1,55 @@
-import {Factory, Seeder} from "@jorgebodega/typeorm-seeding"
-import {Connection} from "typeorm"
+import {DataSource} from "typeorm"
+import {Seeder} from "@jorgebodega/typeorm-seeding"
 import {Department} from "../../entities/department.entity"
+import {Counter} from "../../entities/counter.entity"
 import {User} from "../../entities/user.entity"
-import * as bcrypt from "bcryptjs"
 import {UserRole} from "../../modules/users/enums/user-role.enum"
+import * as bcrypt from "bcrypt"
 
-export default class InitialDatabaseSeed implements Seeder {
-	public async run(factory: Factory, connection: Connection): Promise<void> {
-		// Create admin
-		const adminUser = await connection.getRepository(User).save({
+export class InitialDatabaseSeed implements Seeder {
+	public async run(dataSource: DataSource): Promise<void> {
+		// Get repositories
+		const departmentRepository = dataSource.getRepository(Department)
+		const counterRepository = dataSource.getRepository(Counter)
+		const userRepository = dataSource.getRepository(User)
+
+		// Create departments
+		const pharmacy = await departmentRepository.save({
+			name_en: "Pharmacy",
+			name_ar: "صيدلية",
+			prefix: "P",
+			is_active: true,
+		})
+
+		// Create counters for pharmacy
+		const counter1 = await counterRepository.save({
+			department_id: pharmacy.id,
+			number: 1,
+			is_active: true,
+		})
+
+		const counter2 = await counterRepository.save({
+			department_id: pharmacy.id,
+			number: 2,
+			is_active: true,
+		})
+
+		// Create admin user
+		const hashedPassword = await bcrypt.hash("admin123", 10)
+		await userRepository.save({
 			username: "admin",
-			password_hash: await bcrypt.hash("admin123", 10),
+			password_hash: hashedPassword,
 			role: UserRole.ADMIN,
 			is_active: true,
 		})
 
-		// Create departments
-		const departments = await connection.getRepository(Department).save([
-			{
-				name_en: "Radiology",
-				name_ar: "قسم الأشعة",
-				prefix: "R",
-				is_active: true,
-			},
-			{
-				name_en: "Laboratory",
-				name_ar: "المختبر",
-				prefix: "L",
-				is_active: true,
-			},
-		])
-
-		// Create staff accounts
-		await connection.getRepository(User).save([
-			{
-				username: "reception1",
-				password_hash: await bcrypt.hash("reception123", 10),
-				role: UserRole.RECEPTIONIST,
-				is_active: true,
-			},
-			{
-				username: "counter1",
-				password_hash: await bcrypt.hash("counter123", 10),
-				role: UserRole.COUNTER_STAFF,
-				department_id: departments[0].id,
-				is_active: true,
-			},
-			{
-				username: "counter2",
-				password_hash: await bcrypt.hash("counter123", 10),
-				role: UserRole.COUNTER_STAFF,
-				department_id: departments[1].id,
-				is_active: true,
-			},
-		])
+		// Create reception user
+		const receptionPassword = await bcrypt.hash("reception123", 10)
+		await userRepository.save({
+			username: "reception",
+			password_hash: receptionPassword,
+			role: UserRole.RECEPTIONIST,
+			is_active: true,
+		})
 	}
 }

@@ -23,7 +23,8 @@ interface QueueUpdate {
 
 @WebSocketGateway({
 	cors: {
-		origin: "*",
+		origin: ["https://queue.mchd-manager.com", "http://localhost:5000"],
+		credentials: true,
 	},
 	namespace: "queue",
 })

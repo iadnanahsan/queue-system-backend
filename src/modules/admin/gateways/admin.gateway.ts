@@ -5,6 +5,10 @@ import {AdminStatsResponseDto} from "../dto/stats-response.dto"
 
 @WebSocketGateway({
 	namespace: "admin",
+	cors: {
+		origin: ["https://queue.mchd-manager.com", "http://localhost:5000"],
+		credentials: true,
+	},
 })
 export class AdminGateway {
 	@WebSocketServer()

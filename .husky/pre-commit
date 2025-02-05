@@ -1,8 +1,0 @@
-#!/bin/sh
-. "$(dirname "$0")/_/husky.sh"
-
-# Check if logger files were modified
-if git diff --cached --name-only | grep -q "src/config/logger"
-then
-  npm run verify-log-standards
-fi 

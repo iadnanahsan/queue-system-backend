@@ -34,11 +34,11 @@ async function killPort(port: number): Promise<void> {
 }
 
 async function bootstrap() {
-	const PORT = 5000
+	const PORT = process.env.PORT || 5000
 
-	// Kill any process using port 5000
+	// Kill any process using port
 	try {
-		await killPort(PORT)
+		await killPort(parseInt(PORT as string))
 	} catch (error) {
 		console.log("Port cleanup error:", error)
 	}
@@ -52,8 +52,8 @@ async function bootstrap() {
 
 	// Enable CORS for WebSocket
 	app.enableCors({
-		origin: true,
-		methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+		origin: ["https://queue.mchd-manager.com", "http://localhost:5000"],
+		methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
 		credentials: true,
 		allowedHeaders: ["Authorization", "Content-Type"],
 	})
@@ -90,8 +90,8 @@ async function bootstrap() {
 	await seedService.seed()
 
 	try {
-		await app.listen(process.env.PORT || PORT)
-		console.log(`Application is running on port ${process.env.PORT || PORT}`)
+		await app.listen(PORT)
+		console.log(`Application is running on port ${PORT}`)
 	} catch (error) {
 		console.error("Failed to start server:", error)
 		process.exit(1)
