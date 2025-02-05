@@ -86,8 +86,11 @@ async function bootstrap() {
 	const document = SwaggerModule.createDocument(app, config)
 	SwaggerModule.setup("api-docs", app, document)
 
-	const seedService = app.get(SeedService)
-	await seedService.seed()
+	// Only run seeding if explicitly enabled
+	if (process.env.ENABLE_SEEDING === "true") {
+		const seedService = app.get(SeedService)
+		await seedService.seed()
+	}
 
 	try {
 		await app.listen(PORT)
