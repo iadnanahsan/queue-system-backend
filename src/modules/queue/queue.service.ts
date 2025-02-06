@@ -512,7 +512,7 @@ export class QueueService {
 	}
 
 	async completeAndCallNext(departmentId: string, counterId: number) {
-		// 1. Find current patient
+		// 1. Find & complete current patient
 		const currentPatient = await this.queueRepository.findOne({
 			where: {
 				departmentId,
@@ -523,7 +523,7 @@ export class QueueService {
 		})
 
 		if (currentPatient) {
-			// Complete current patient but keep counterId for records
+			// Complete current patient
 			await this.queueRepository.save({
 				...currentPatient,
 				status: QueueStatus.COMPLETED,
@@ -532,34 +532,47 @@ export class QueueService {
 
 			// Remove from Redis
 			await this.removeFromRedisQueue(departmentId, currentPatient.id)
+
+			// Update display for completed patient
+			await this.displayGateway.emitDisplayUpdate(departmentId, {
+				type: "STATUS_UPDATE",
+				queueNumber: currentPatient.queueNumber,
+				patientName: currentPatient.patientName,
+				status: QueueStatus.COMPLETED,
+			})
 		}
 
-		// Use existing functions for next patient
-		const nextPatient = await this.queueRepository.findOne({
-			where: {
-				departmentId,
-				status: QueueStatus.WAITING,
-				counterId: IsNull(),
-			},
-			order: {
-				createdAt: "ASC",
-			},
-			relations: ["department", "counter"],
-		})
+		// 2. Try to get & serve next patient
+		try {
+			const nextPatient = await this.queueRepository.findOne({
+				where: {
+					departmentId,
+					status: QueueStatus.WAITING,
+					counterId: IsNull(),
+				},
+				order: {
+					createdAt: "ASC",
+				},
+				relations: ["department", "counter"],
+			})
 
-		if (!nextPatient) {
-			throw new NotFoundException("No waiting patients")
-		}
+			if (!nextPatient) {
+				// Clear display when no next patient
+				await this.displayGateway.emitDisplayUpdate(departmentId, {
+					type: "CLEAR_SERVING",
+					message: "No patients waiting",
+				})
+				return {completed: currentPatient, next: null}
+			}
 
-		const served = await this.servePatient(nextPatient.id, counterId)
+			const served = await this.servePatient(nextPatient.id, counterId)
+			await this.queueGateway.emitNextPatient(departmentId, currentPatient, served)
 
-		// Single emit here
-		await this.queueGateway.emitStatusUpdate(departmentId, served)
-		await this.queueGateway.emitNextPatient(departmentId, currentPatient, served)
-
-		return {
-			completed: currentPatient,
-			next: served,
+			return {completed: currentPatient, next: served}
+		} catch (error) {
+			// Even if getting next patient fails, current patient completion succeeded
+			console.error("Error getting next patient:", error)
+			return {completed: currentPatient, next: null}
 		}
 	}
 
@@ -846,7 +859,7 @@ export class QueueService {
 	}
 
 	async noShowAndCallNext(departmentId: string, counterId: number) {
-		// 1. Find current patient
+		// 1. Find & mark current patient as no-show
 		const currentPatient = await this.queueRepository.findOne({
 			where: {
 				departmentId,
@@ -857,7 +870,7 @@ export class QueueService {
 		})
 
 		if (currentPatient) {
-			// Mark no-show but keep counterId for records
+			// Mark as no-show
 			await this.queueRepository.save({
 				...currentPatient,
 				status: QueueStatus.NO_SHOW,
@@ -866,31 +879,47 @@ export class QueueService {
 
 			// Remove from Redis
 			await this.removeFromRedisQueue(departmentId, currentPatient.id)
+
+			// Update display for no-show patient
+			await this.displayGateway.emitDisplayUpdate(departmentId, {
+				type: "STATUS_UPDATE",
+				queueNumber: currentPatient.queueNumber,
+				patientName: currentPatient.patientName,
+				status: QueueStatus.NO_SHOW,
+			})
 		}
 
-		// Use existing functions for next patient
-		const nextPatient = await this.queueRepository.findOne({
-			where: {
-				departmentId,
-				status: QueueStatus.WAITING,
-				counterId: IsNull(),
-			},
-			order: {
-				createdAt: "ASC",
-			},
-			relations: ["department", "counter"],
-		})
+		// 2. Try to get & serve next patient
+		try {
+			const nextPatient = await this.queueRepository.findOne({
+				where: {
+					departmentId,
+					status: QueueStatus.WAITING,
+					counterId: IsNull(),
+				},
+				order: {
+					createdAt: "ASC",
+				},
+				relations: ["department", "counter"],
+			})
 
-		if (!nextPatient) {
-			throw new NotFoundException("No waiting patients")
-		}
+			if (!nextPatient) {
+				// Clear display when no next patient
+				await this.displayGateway.emitDisplayUpdate(departmentId, {
+					type: "CLEAR_SERVING",
+					message: "No patients waiting",
+				})
+				return {noShow: currentPatient, next: null}
+			}
 
-		const served = await this.servePatient(nextPatient.id, counterId)
-		await this.queueGateway.emitNextPatient(departmentId, currentPatient, served)
+			const served = await this.servePatient(nextPatient.id, counterId)
+			await this.queueGateway.emitNextPatient(departmentId, currentPatient, served)
 
-		return {
-			noShow: currentPatient,
-			next: served,
+			return {noShow: currentPatient, next: served}
+		} catch (error) {
+			// Even if getting next patient fails, no-show marking succeeded
+			console.error("Error getting next patient:", error)
+			return {noShow: currentPatient, next: null}
 		}
 	}
 
