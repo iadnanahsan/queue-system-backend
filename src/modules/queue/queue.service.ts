@@ -290,6 +290,10 @@ export class QueueService {
 			pipeline.zadd(queueKey, Date.now(), savedEntry.id)
 			await pipeline.exec()
 
+			// Add cache invalidation after successful save
+			await this.displayService.invalidateDisplayCache(createQueueEntryDto.department_id)
+
+			// Existing socket emissions
 			await this.queueGateway.emitNewTicket(createQueueEntryDto.department_id, savedEntry)
 
 			// Add to Redis after successful DB save
@@ -525,10 +529,11 @@ export class QueueService {
 				completedAt: new Date(),
 			})
 
-			// Remove from Redis
-			await this.removeFromRedisQueue(departmentId, currentPatient.id)
+			// Add cache invalidation
+			await this.displayService.invalidateDisplayCache(departmentId)
 
-			// Update display for completed patient
+			// Existing Redis and socket updates
+			await this.removeFromRedisQueue(departmentId, currentPatient.id)
 			await this.displayGateway.emitDisplayUpdate(departmentId, {
 				type: "STATUS_UPDATE",
 				queueNumber: currentPatient.queueNumber,
@@ -872,10 +877,11 @@ export class QueueService {
 				noShowAt: new Date(),
 			})
 
-			// Remove from Redis
-			await this.removeFromRedisQueue(departmentId, currentPatient.id)
+			// Add cache invalidation
+			await this.displayService.invalidateDisplayCache(departmentId)
 
-			// Update display for no-show patient
+			// Existing Redis and socket updates
+			await this.removeFromRedisQueue(departmentId, currentPatient.id)
 			await this.displayGateway.emitDisplayUpdate(departmentId, {
 				type: "STATUS_UPDATE",
 				queueNumber: currentPatient.queueNumber,
