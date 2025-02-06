@@ -19,7 +19,7 @@ export class AuthService {
 	) {}
 
 	async validateUser(username: string, password: string): Promise<any> {
-		const user = await this.usersService.findByUsername(username)
+		const user = await this.usersService.findByUsername(username.toLowerCase())
 		if (!user || !user.is_active) {
 			throw new UnauthorizedException("Invalid credentials or inactive user")
 		}

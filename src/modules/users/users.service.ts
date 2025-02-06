@@ -6,7 +6,7 @@ import {
 	InternalServerErrorException,
 } from "@nestjs/common"
 import {InjectRepository} from "@nestjs/typeorm"
-import {Repository, In, Not} from "typeorm"
+import {Repository, In, Not, ILike} from "typeorm"
 import {User} from "../../entities/user.entity"
 import {Counter} from "../../entities/counter.entity"
 import {QueueEntry} from "../queue/entities/queue-entry.entity"
@@ -200,8 +200,12 @@ export class UsersService {
 		})
 	}
 
-	async findByUsername(username: string): Promise<User | null> {
-		return this.usersRepository.findOne({where: {username}})
+	async findByUsername(username: string): Promise<User> {
+		return this.usersRepository.findOne({
+			where: {
+				username: ILike(username),
+			},
+		})
 	}
 
 	async toggleUserStatus(id: string): Promise<User> {
