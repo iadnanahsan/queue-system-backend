@@ -258,4 +258,10 @@ export class DisplayService {
 			where: {departmentId, is_active: true},
 		})
 	}
+
+	async invalidateDisplayCache(departmentId: string) {
+		const redis = this.redisService.getClient()
+		const displayKey = `${this.DISPLAY_PREFIX}${departmentId}:current`
+		await redis.del(displayKey)
+	}
 }

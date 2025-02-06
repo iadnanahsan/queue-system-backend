@@ -18,6 +18,7 @@ import {ALLOWED_STATUS_TRANSITIONS, STATUS_ACTIONS} from "./constants/status-tra
 import {GetQueueMetricsDto} from "./dto/get-queue-metrics.dto"
 import {User} from "../../entities/user.entity"
 import {RedisQueueMetrics} from "./dto/queue-metrics.dto"
+import {DisplayService} from "../display/display.service"
 
 @Injectable()
 export class QueueService {
@@ -36,7 +37,8 @@ export class QueueService {
 		private readonly redisService: RedisService,
 		private readonly displayGateway: DisplayGateway,
 		@InjectRepository(User)
-		private userRepository: Repository<User>
+		private userRepository: Repository<User>,
+		private displayService: DisplayService
 	) {}
 
 	private async generateQueueNumber(departmentId: string): Promise<string> {
@@ -106,6 +108,9 @@ export class QueueService {
 			status,
 			counterId: status === QueueStatus.COMPLETED ? null : entry.counterId,
 		})
+
+		// Add this single line to invalidate display cache
+		await this.displayService.invalidateDisplayCache(entry.departmentId)
 
 		// Emit to both gateways
 		await Promise.all([
