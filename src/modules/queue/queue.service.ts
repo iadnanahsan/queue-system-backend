@@ -454,39 +454,29 @@ export class QueueService {
 	}
 
 	async servePatient(id: string, counterId: number): Promise<QueueEntry> {
-		// Validate counter exists
-		const counter = await this.counterRepository.findOne({
-			where: {id: counterId},
-			relations: ["department"],
-		})
-		if (!counter) {
-			throw new NotFoundException(`Counter ${counterId} not found`)
-		}
-
 		const entry = await this.queueRepository.findOne({
 			where: {id},
 			relations: ["department", "counter"],
 		})
-		if (!entry) {
-			throw new NotFoundException("Queue entry not found")
-		}
 
-		// Validate department match
-		if (entry.departmentId !== counter.department.id) {
-			throw new BadRequestException("Counter does not belong to patient's department")
-		}
-
-		// Must have counter when serving
-		entry.counterId = counterId
-		entry.status = QueueStatus.SERVING
-		entry.servedAt = new Date()
-
-		// Get fully loaded entry with counter
-		const updated = await this.queueRepository.save(entry)
-		return this.queueRepository.findOne({
-			where: {id},
-			relations: ["department", "counter"],
+		const served = await this.queueRepository.save({
+			...entry,
+			status: QueueStatus.SERVING,
+			counterId,
+			servedAt: new Date(),
 		})
+
+		// THIS EMIT IS MISSING! Add it here:
+		await this.displayGateway.emitDisplayUpdate(entry.departmentId, {
+			type: "STATUS_UPDATE",
+			queueNumber: served.queueNumber,
+			patientName: served.patientName,
+			fileNumber: served.fileNumber,
+			status: QueueStatus.SERVING,
+			counter: counterId,
+		})
+
+		return served
 	}
 
 	async markNoShow(id: string): Promise<QueueEntry> {

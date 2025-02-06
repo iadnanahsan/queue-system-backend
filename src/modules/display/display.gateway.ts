@@ -85,17 +85,15 @@ export class DisplayGateway implements OnGatewayConnection, OnGatewayDisconnect 
 	async emitDisplayUpdate(departmentId: string, data: any) {
 		try {
 			const displayAccess = await this.displayService.getDisplayAccessByDepartment(departmentId)
-			if (displayAccess) {
-				// Make sure we emit with correct event name and data structure
-				this.server.to(`display:${displayAccess.access_code}`).emit("display:update", {
-					type: data.type,
-					queueNumber: data.queueNumber,
-					patientName: data.patientName,
-					fileNumber: data.fileNumber,
-					status: data.status,
-					counter: data.counter, // Make sure this is included
-				})
+			if (!displayAccess) {
+				this.debug(`No display access found for department ${departmentId}`)
+				return
 			}
+
+			// Debug to see if this is called twice
+			console.log("Display Gateway Emit Called:", new Date().getTime())
+
+			this.server.to(`display:${displayAccess.access_code}`).emit("display:update", data)
 		} catch (error) {
 			this.debug(`Error emitting display update: ${error}`)
 		}
