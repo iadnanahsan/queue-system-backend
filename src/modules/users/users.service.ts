@@ -1,4 +1,10 @@
-import {Injectable, BadRequestException, ConflictException, NotFoundException} from "@nestjs/common"
+import {
+	Injectable,
+	BadRequestException,
+	ConflictException,
+	NotFoundException,
+	InternalServerErrorException,
+} from "@nestjs/common"
 import {InjectRepository} from "@nestjs/typeorm"
 import {Repository, In, Not} from "typeorm"
 import {User} from "../../entities/user.entity"
@@ -12,6 +18,7 @@ import {UpdatePasswordDto} from "./dto/update-password.dto"
 import * as bcrypt from "bcryptjs"
 import {Department} from "../../entities/department.entity"
 import {UpdateUserRoleDto} from "./dto/update-user-role.dto"
+import {isUUID} from "class-validator"
 
 @Injectable()
 export class UsersService {
@@ -227,58 +234,82 @@ export class UsersService {
 	}
 
 	async updateUserDepartment(userId: string, departmentId: string): Promise<User> {
-		const user = await this.findById(userId)
+		try {
+			const user = await this.findById(userId)
+			if (!user) {
+				throw new NotFoundException("User not found")
+			}
 
-		// Handle active counter staff
-		if (user.role === UserRole.COUNTER_STAFF) {
-			// Check active queues
-			if (user.counter_id) {
-				const hasActiveQueues = await this.checkActiveQueues(user.counter_id)
-				if (hasActiveQueues) {
-					throw new BadRequestException("Cannot change department while staff has active queues")
+			// Validate UUID format
+			if (!isUUID(departmentId)) {
+				throw new BadRequestException("Invalid department ID format. Must be a valid UUID")
+			}
+
+			// Handle active counter staff
+			if (user.role === UserRole.COUNTER_STAFF) {
+				// Check active queues
+				if (user.counter_id) {
+					const hasActiveQueues = await this.checkActiveQueues(user.counter_id)
+					if (hasActiveQueues) {
+						throw new BadRequestException("Cannot change department: Counter staff has active queues")
+					}
 				}
 			}
 
-			// Remove counter assignment when changing department
-			user.counter_id = undefined
-		}
+			// Verify department exists and is active
+			const department = await this.departmentRepository.findOne({
+				where: {id: departmentId},
+			})
+			if (!department) {
+				throw new NotFoundException("Department not found")
+			}
+			if (!department.is_active) {
+				throw new BadRequestException("Cannot assign to inactive department")
+			}
 
-		// Verify department exists
-		const department = await this.departmentRepository.findOne({
-			where: {id: departmentId},
-		})
-		if (!department) {
-			throw new NotFoundException("Department not found")
+			user.department_id = departmentId
+			user.counter_id = null // Reset counter when changing department
+			return this.usersRepository.save(user)
+		} catch (error) {
+			if (error instanceof BadRequestException || error instanceof NotFoundException) {
+				throw error
+			}
+			throw new InternalServerErrorException("Failed to update department")
 		}
-
-		user.department_id = departmentId
-		return this.usersRepository.save(user)
 	}
 
 	async updateUserRole(id: string, dto: UpdateUserRoleDto): Promise<User> {
-		const user = await this.usersRepository.findOne({
-			where: {id},
-			relations: ["department", "counter"],
-		})
-
+		const user = await this.findById(id)
 		if (!user) {
 			throw new NotFoundException("User not found")
 		}
 
-		// Check if user has active queues
+		// Validate role enum
+		if (!Object.values(UserRole).includes(dto.role)) {
+			throw new BadRequestException(`Invalid role. Must be one of: ${Object.values(UserRole).join(", ")}`)
+		}
+
+		// Counter staff specific validations
+		if (dto.role === UserRole.COUNTER_STAFF) {
+			if (!dto.department_id) {
+				throw new BadRequestException("Department ID is required for counter staff role")
+			}
+			if (!isUUID(dto.department_id)) {
+				throw new BadRequestException("Invalid department ID format. Must be a valid UUID")
+			}
+		}
+
+		// Check active queues
 		if (user.counter_id) {
 			const hasActiveQueues = await this.checkActiveQueues(user.counter_id)
 			if (hasActiveQueues) {
-				throw new BadRequestException("Cannot change role while user has active queues")
+				throw new BadRequestException("Cannot change role: User has active queues")
 			}
 		}
 
 		// Handle role-specific requirements
 		switch (dto.role) {
 			case UserRole.COUNTER_STAFF:
-				if (!dto.department_id) {
-					throw new BadRequestException("Department is required for counter staff")
-				}
 				const department = await this.departmentRepository.findOne({
 					where: {id: dto.department_id},
 				})

@@ -11,11 +11,11 @@ import {WsJwtAuthGuard} from "../auth/guards/ws-jwt-auth.guard"
 import {DisplayService} from "./display.service"
 
 @WebSocketGateway({
-	namespace: "display",
 	cors: {
 		origin: ["https://queue.mchd-manager.com", "http://localhost:5000"],
 		credentials: true,
 	},
+	namespace: "display",
 })
 export class DisplayGateway implements OnGatewayConnection, OnGatewayDisconnect {
 	constructor(private readonly displayService: DisplayService) {}

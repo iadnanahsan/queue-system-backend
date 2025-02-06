@@ -1,5 +1,5 @@
 import {Controller, Post, Body, Get, UseGuards, HttpStatus, HttpCode, Param, Put, Query} from "@nestjs/common"
-import {ApiTags, ApiOperation, ApiBearerAuth, ApiResponse, ApiSecurity, ApiQuery} from "@nestjs/swagger"
+import {ApiTags, ApiOperation, ApiBearerAuth, ApiResponse, ApiSecurity, ApiQuery, ApiBody} from "@nestjs/swagger"
 import {UsersService} from "./users.service"
 import {CreateUserDto} from "./dto/create-user.dto"
 import {JwtAuthGuard} from "../auth/guards/jwt-auth.guard"
@@ -64,14 +64,29 @@ export class UsersController {
 
 	@Put(":id/status")
 	@Roles("admin")
-	@ApiOperation({summary: "Toggle user active status"})
+	@ApiOperation({
+		summary: "Toggle user active status",
+		description:
+			"Admin can toggle user's active/inactive status. Cannot deactivate: 1) Admin users 2) Counter staff with active queues",
+	})
+	@ApiResponse({
+		status: 200,
+		description: "User status updated successfully",
+	})
+	@ApiResponse({
+		status: 400,
+		description: "Cannot deactivate: Admin account or Counter staff with active queues",
+	})
 	async toggleStatus(@Param("id") id: string) {
 		return this.usersService.toggleUserStatus(id)
 	}
 
 	@Put(":id/password")
 	@Roles("admin")
-	@ApiOperation({summary: "Update user password"})
+	@ApiOperation({
+		summary: "Update user password",
+		description: "Update password for any user. Leave empty to keep current password",
+	})
 	async updatePassword(@Param("id") id: string, @Body() dto: UpdatePasswordDto) {
 		return this.usersService.updatePassword(id, dto.newPassword)
 	}
@@ -86,11 +101,36 @@ export class UsersController {
 	}
 
 	@Put(":id/department")
-	@Roles(UserRole.ADMIN)
-	@ApiOperation({summary: "Update user's department"})
-	@ApiResponse({status: 200, description: "Department updated successfully", type: User})
-	@ApiResponse({status: 400, description: "Cannot update department - active queues exist"})
-	@ApiResponse({status: 404, description: "User or department not found"})
+	@Roles("admin")
+	@ApiOperation({
+		summary: "Update user's department",
+		description:
+			"Assign user to a different department. For counter staff: Cannot change if they have active queues",
+	})
+	@ApiBody({
+		description: "Department ID to assign",
+		type: UpdateDepartmentDto,
+		examples: {
+			example: {
+				value: {
+					departmentId: "240d169e-83de-4932-837c-42de45f56fee",
+				},
+			},
+		},
+	})
+	@ApiResponse({
+		status: 200,
+		description: "Department updated successfully",
+		type: User,
+	})
+	@ApiResponse({
+		status: 400,
+		description: "Cannot change department while staff has active queues",
+	})
+	@ApiResponse({
+		status: 404,
+		description: "User or department not found",
+	})
 	async updateDepartment(@Param("id") id: string, @Body() dto: UpdateDepartmentDto) {
 		return this.usersService.updateUserDepartment(id, dto.departmentId)
 	}
@@ -99,7 +139,12 @@ export class UsersController {
 	@Roles("admin")
 	@ApiOperation({
 		summary: "Update user role",
-		description: "Update user role and department if applicable",
+		description:
+			"Change user role. For counter staff role: department_id is required. Cannot change if user has active queues",
+	})
+	@ApiResponse({
+		status: 400,
+		description: "Department required for counter staff or user has active queues",
 	})
 	@ApiResponse({
 		status: 200,
@@ -113,14 +158,6 @@ export class UsersController {
 				counter_id: {type: "number", nullable: true},
 			},
 		},
-	})
-	@ApiResponse({
-		status: 400,
-		description: "Cannot change role - user has active queues",
-	})
-	@ApiResponse({
-		status: 404,
-		description: "User or department not found",
 	})
 	async updateUserRole(@Param("id") id: string, @Body() dto: UpdateUserRoleDto): Promise<User> {
 		return this.usersService.updateUserRole(id, dto)
