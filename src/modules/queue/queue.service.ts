@@ -470,7 +470,9 @@ export class QueueService {
 			servedAt: new Date(),
 		})
 
-		// THIS EMIT IS MISSING! Add it here:
+		// Add cache invalidation BEFORE socket update
+		await this.displayService.invalidateDisplayCache(entry.departmentId)
+
 		await this.displayGateway.emitDisplayUpdate(entry.departmentId, {
 			type: "STATUS_UPDATE",
 			queueNumber: served.queueNumber,
