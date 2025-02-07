@@ -31,10 +31,3 @@ export interface QueueEvents {
 		next?: QueueEntry // Optional - might not have next patient
 	}
 }
-
-export interface QueueAnnouncement {
-	queueNumber: string;
-	counter: number;
-	patientName: string;
-	fileNumber: string;
-}

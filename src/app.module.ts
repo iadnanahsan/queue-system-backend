@@ -9,7 +9,6 @@ import {QueueModule} from "./modules/queue/queue.module"
 import {SeedModule} from "./modules/seed/seed.module"
 import {BullModule} from "@nestjs/bull"
 import {AdminModule} from "./modules/admin/admin.module"
-import {SharedModule} from "./modules/shared/shared.module"
 // Import entities from the entities folder
 import {User} from "./entities/user.entity"
 import {Department} from "./entities/department.entity"
@@ -19,9 +18,8 @@ import {QueueEntry} from "./entities/queue-entry.entity"
 @Module({
 	imports: [
 		ConfigModule.forRoot({
-			isGlobal: true,
+			isGlobal: true, // Make config globally available
 		}),
-		SharedModule,
 		TypeOrmModule.forRootAsync({
 			imports: [ConfigModule],
 			useFactory: (configService: ConfigService) => ({

@@ -9,7 +9,6 @@ import {Server, Socket} from "socket.io"
 import {UseGuards} from "@nestjs/common"
 import {WsJwtAuthGuard} from "../auth/guards/ws-jwt-auth.guard"
 import {DisplayService} from "./display.service"
-import {PollyService} from "../../services/polly.service"
 
 @WebSocketGateway({
 	cors: {
@@ -19,7 +18,7 @@ import {PollyService} from "../../services/polly.service"
 	namespace: "display",
 })
 export class DisplayGateway implements OnGatewayConnection, OnGatewayDisconnect {
-	constructor(private readonly displayService: DisplayService, private readonly pollyService: PollyService) {}
+	constructor(private readonly displayService: DisplayService) {}
 
 	@WebSocketServer()
 	server: Server
@@ -104,15 +103,14 @@ export class DisplayGateway implements OnGatewayConnection, OnGatewayDisconnect 
 		try {
 			const displayAccess = await this.displayService.getDisplayAccessByDepartment(departmentId)
 			if (displayAccess) {
-				// Generate audio announcement
-				const audioData = await this.pollyService.generateAnnouncement(data.queueNumber, data.counter)
+				// Debug announcement data
+				console.log("Display announcement data:", data)
 
-				// Emit to all displays in this department
 				this.server.to(`display:${displayAccess.access_code}`).emit("display:announce", {
-					queueNumber: data.queueNumber,
+					queueNumber: data.queueNumber, // Include queue number
+					fileNumber: data.fileNumber,
 					name: data.patientName, // Frontend expects 'name'
-					counter: data.counter, // Counter number
-					audioData, // Base64 audio data
+					counter: data.counter,
 				})
 			}
 		} catch (error) {

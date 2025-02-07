@@ -431,12 +431,12 @@ export class QueueService {
 			await this.queueRepository.save(entry)
 		}
 
-		// This is where the announcement should happen
+		// Emit call event via WebSocket for audio
 		await this.displayGateway.emitAnnouncement(entry.departmentId, {
-			queueNumber: entry.queueNumber,
-			counter: entry.counter.number,
-			patientName: entry.patientName,
 			fileNumber: entry.fileNumber,
+			queueNumber: entry.queueNumber,
+			name: entry.patientName,
+			counter: entry.counter.number,
 		})
 
 		return {
@@ -966,14 +966,6 @@ export class QueueService {
 			console.log("Found counter:", counter)
 
 			entry.counter = counter
-
-			// Trigger announcement when status changes to serving
-			await this.queueGateway.emitAnnouncement(entry.departmentId, {
-				queueNumber: entry.queueNumber,
-				counter: counter.number,
-				patientName: entry.patientName,
-				fileNumber: entry.fileNumber,
-			})
 		}
 
 		// Save and verify
