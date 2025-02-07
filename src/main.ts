@@ -34,6 +34,12 @@ async function killPort(port: number): Promise<void> {
 }
 
 async function bootstrap() {
+	console.log("Environment Check:", {
+		nodeEnv: process.env.NODE_ENV,
+		hasAwsRegion: !!process.env.AWS_REGION,
+		hasAwsKey: !!process.env.AWS_ACCESS_KEY,
+		hasAwsSecret: !!process.env.AWS_SECRET_KEY,
+	})
 	const PORT = process.env.PORT || 5000
 
 	// Kill any process using port

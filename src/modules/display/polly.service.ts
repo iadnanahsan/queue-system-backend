@@ -14,12 +14,24 @@ export class PollyService {
 	private readonly pollyClient: PollyClient
 
 	constructor(private configService: ConfigService) {
+		const region = this.configService.get<string>("AWS_REGION")
+		const accessKeyId = this.configService.get<string>("AWS_ACCESS_KEY")
+		const secretAccessKey = this.configService.get<string>("AWS_SECRET_KEY")
+
+		if (!region || !accessKeyId || !secretAccessKey) {
+			throw new Error("AWS credentials not properly configured")
+		}
+
+		// Log masked credentials for debugging
+		console.log("AWS Config:", {
+			region,
+			accessKeyId: accessKeyId.substring(0, 4) + "...",
+			hasSecretKey: !!secretAccessKey,
+		})
+
 		this.pollyClient = new PollyClient({
-			region: this.configService.get<string>("AWS_REGION"),
-			credentials: {
-				accessKeyId: this.configService.get<string>("AWS_ACCESS_KEY"),
-				secretAccessKey: this.configService.get<string>("AWS_SECRET_KEY"),
-			},
+			region,
+			credentials: {accessKeyId, secretAccessKey},
 		})
 	}
 
