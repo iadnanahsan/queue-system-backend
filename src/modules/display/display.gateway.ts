@@ -116,26 +116,35 @@ export class DisplayGateway implements OnGatewayConnection, OnGatewayDisconnect 
 
 	async emitAnnouncement(departmentId: string, data: any) {
 		try {
+			console.log("Starting emitAnnouncement with data:", data)
 			const displayAccess = await this.displayService.getDisplayAccessByDepartment(departmentId)
+
 			if (displayAccess) {
-				// Generate announcement text
 				const announcementText = `الرقم ${data.queueNumber}، الرجاء التوجه إلى نافذة الخدمة رقم ${data.counter}`
+				console.log("1. Generated announcement text:", announcementText)
 
-				// Generate audio using Polly
+				console.log("2. Calling Polly service...")
 				const audioBuffer = await this.pollyService.synthesizeSpeech(announcementText)
-				const audioBase64 = audioBuffer.toString("base64")
+				console.log("3. Got audio buffer of size:", audioBuffer.length)
 
-				// Emit with audio
+				const audioBase64 = audioBuffer.toString("base64")
+				console.log("4. Converted to base64, first 50 chars:", audioBase64.substring(0, 50))
+
+				console.log("5. Emitting to room:", `display:${displayAccess.access_code}`)
 				this.server.to(`display:${displayAccess.access_code}`).emit("display:announce", {
 					queueNumber: data.queueNumber,
 					fileNumber: data.fileNumber,
 					name: data.name,
 					counter: data.counter,
-					audio: audioBase64, // Add audio
-					text: announcementText, // Add text
+					audio: audioBase64,
+					text: announcementText,
 				})
+				console.log("6. Announcement emitted successfully")
+			} else {
+				console.log("No display access found for department:", departmentId)
 			}
 		} catch (error) {
+			console.error("Error in emitAnnouncement:", error)
 			this.debug(`Error emitting announcement: ${error}`)
 		}
 	}

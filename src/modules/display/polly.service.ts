@@ -24,6 +24,8 @@ export class PollyService {
 	}
 
 	async synthesizeSpeech(text: string): Promise<Buffer> {
+		console.log("PollyService: Starting synthesis for text:", text)
+
 		const params: SynthesizeSpeechCommandInput = {
 			Engine: "neural",
 			LanguageCode: "arb", // Modern Standard Arabic
@@ -35,16 +37,21 @@ export class PollyService {
 		}
 
 		try {
+			console.log("PollyService: Sending request to AWS...")
 			const command = new SynthesizeSpeechCommand(params)
 			const response = await this.pollyClient.send(command)
+			console.log("PollyService: Got response from AWS")
 
 			if (!response.AudioStream) {
+				console.error("PollyService: No audio stream in response")
 				throw new Error("No audio stream returned")
 			}
 
-			return Buffer.from(await response.AudioStream.transformToByteArray())
+			const buffer = Buffer.from(await response.AudioStream.transformToByteArray())
+			console.log("PollyService: Successfully created buffer of size:", buffer.length)
+			return buffer
 		} catch (error) {
-			console.error("Error synthesizing speech:", error)
+			console.error("PollyService Error:", error)
 			throw error
 		}
 	}
