@@ -8,11 +8,19 @@ export class PollyService {
 	private readonly cache: Map<string, Buffer> = new Map()
 
 	constructor(private configService: ConfigService) {
+		const accessKeyId = this.configService.get<string>("AWS_ACCESS_KEY")
+		const secretAccessKey = this.configService.get<string>("AWS_SECRET_KEY")
+		const region = this.configService.get<string>("AWS_REGION")
+
+		if (!accessKeyId || !secretAccessKey || !region) {
+			throw new Error("Missing AWS credentials or region")
+		}
+
 		this.polly = new Polly({
-			region: configService.get<string>("AWS_REGION"),
+			region,
 			credentials: {
-				accessKeyId: configService.get<string>("AWS_ACCESS_KEY"),
-				secretAccessKey: configService.get<string>("AWS_SECRET_KEY"),
+				accessKeyId,
+				secretAccessKey,
 			},
 		})
 	}

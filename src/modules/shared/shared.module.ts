@@ -3,7 +3,11 @@ import {ConfigModule} from "@nestjs/config"
 import {PollyService} from "../../services/polly.service"
 
 @Module({
-	imports: [ConfigModule],
+	imports: [
+		ConfigModule.forRoot({
+			isGlobal: true,
+		}),
+	],
 	providers: [PollyService],
 	exports: [PollyService], // Export so other modules can use it
 })

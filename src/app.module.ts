@@ -21,6 +21,7 @@ import {QueueEntry} from "./entities/queue-entry.entity"
 		ConfigModule.forRoot({
 			isGlobal: true,
 		}),
+		SharedModule,
 		TypeOrmModule.forRootAsync({
 			imports: [ConfigModule],
 			useFactory: (configService: ConfigService) => ({
@@ -55,7 +56,6 @@ import {QueueEntry} from "./entities/queue-entry.entity"
 			inject: [ConfigService],
 		}),
 		AdminModule,
-		SharedModule,
 	],
 })
 export class AppModule {}
