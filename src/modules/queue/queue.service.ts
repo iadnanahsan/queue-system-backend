@@ -431,7 +431,7 @@ export class QueueService {
 			await this.queueRepository.save(entry)
 		}
 
-		// Emit call event via WebSocket for audio
+		// This is where the announcement should happen
 		await this.displayGateway.emitAnnouncement(entry.departmentId, {
 			queueNumber: entry.queueNumber,
 			counter: entry.counter.number,

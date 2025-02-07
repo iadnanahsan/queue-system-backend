@@ -162,10 +162,7 @@ export class QueueGateway implements OnGatewayConnection, OnGatewayDisconnect {
 		// Debug announcement data
 		console.log("Emitting announcement:", data)
 
-		// Forward to display gateway
-		await this.displayGateway.emitDisplayUpdate(departmentId, {
-			type: "ANNOUNCEMENT",
-			...data,
-		})
+		// Directly call emitAnnouncement instead of emitDisplayUpdate
+		await this.displayGateway.emitAnnouncement(departmentId, data)
 	}
 }
