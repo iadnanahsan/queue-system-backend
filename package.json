@@ -17,6 +17,7 @@
 	},
 	"dependencies": {
 		"@aws-sdk/client-polly": "^3.743.0",
+		"@aws-sdk/node-http-handler": "^3.370.0",
 		"@jorgebodega/typeorm-seeding": "^7.1.0",
 		"@modelcontextprotocol/sdk": "^1.4.1",
 		"@nestjs/bull": "^11.0.0",

@@ -9,7 +9,10 @@ import {Server, Socket} from "socket.io"
 import {UseGuards} from "@nestjs/common"
 import {WsJwtAuthGuard} from "../auth/guards/ws-jwt-auth.guard"
 import {DisplayService} from "./display.service"
+import {PollyService} from "./polly.service"
+import {Injectable} from "@nestjs/common"
 
+@Injectable()
 @WebSocketGateway({
 	cors: {
 		origin: ["https://queue.mchd-manager.com", "http://localhost:5000"],
@@ -18,7 +21,7 @@ import {DisplayService} from "./display.service"
 	namespace: "display",
 })
 export class DisplayGateway implements OnGatewayConnection, OnGatewayDisconnect {
-	constructor(private readonly displayService: DisplayService) {}
+	constructor(private readonly displayService: DisplayService, private readonly pollyService: PollyService) {}
 
 	@WebSocketServer()
 	server: Server
@@ -84,18 +87,30 @@ export class DisplayGateway implements OnGatewayConnection, OnGatewayDisconnect 
 	// Called by QueueGateway when queue updates happen
 	async emitDisplayUpdate(departmentId: string, data: any) {
 		try {
-			const displayAccess = await this.displayService.getDisplayAccessByDepartment(departmentId)
-			if (!displayAccess) {
-				this.debug(`No display access found for department ${departmentId}`)
-				return
+			if (data.type === "ANNOUNCEMENT") {
+				// Generate announcement text
+				const announcementText = `الرقم ${data.queueNumber}، الرجاء التوجه إلى نافذة الخدمة رقم ${data.counter}`
+
+				// Generate audio using Polly
+				const audioBuffer = await this.pollyService.synthesizeSpeech(announcementText)
+
+				// Convert buffer to base64
+				const audioBase64 = audioBuffer.toString("base64")
+
+				// Emit announcement with audio
+				this.server.to(`department-${departmentId}`).emit("display:announce", {
+					...data,
+					audio: audioBase64,
+					text: announcementText,
+				})
+			} else {
+				// Handle other display updates as before
+				this.server.to(`department-${departmentId}`).emit("display:update", data)
 			}
-
-			// Debug to see if this is called twice
-			console.log("Display Gateway Emit Called:", new Date().getTime())
-
-			this.server.to(`display:${displayAccess.access_code}`).emit("display:update", data)
 		} catch (error) {
-			this.debug(`Error emitting display update: ${error}`)
+			console.error("Error in emitDisplayUpdate:", error)
+			// Fallback to normal announcement without audio
+			this.server.to(`department-${departmentId}`).emit("display:announce", data)
 		}
 	}
 
