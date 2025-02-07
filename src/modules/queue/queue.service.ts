@@ -433,10 +433,10 @@ export class QueueService {
 
 		// Emit call event via WebSocket for audio
 		await this.displayGateway.emitAnnouncement(entry.departmentId, {
-			fileNumber: entry.fileNumber,
 			queueNumber: entry.queueNumber,
-			name: entry.patientName,
 			counter: entry.counter.number,
+			patientName: entry.patientName,
+			fileNumber: entry.fileNumber,
 		})
 
 		return {

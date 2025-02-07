@@ -107,12 +107,12 @@ export class DisplayGateway implements OnGatewayConnection, OnGatewayDisconnect 
 				// Generate audio announcement
 				const audioData = await this.pollyService.generateAnnouncement(data.queueNumber, data.counter)
 
+				// Emit to all displays in this department
 				this.server.to(`display:${displayAccess.access_code}`).emit("display:announce", {
 					queueNumber: data.queueNumber,
-					fileNumber: data.fileNumber,
-					name: data.patientName,
-					counter: data.counter,
-					audioData, // Include base64 audio data
+					name: data.patientName, // Frontend expects 'name'
+					counter: data.counter, // Counter number
+					audioData, // Base64 audio data
 				})
 			}
 		} catch (error) {
