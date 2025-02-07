@@ -118,14 +118,21 @@ export class DisplayGateway implements OnGatewayConnection, OnGatewayDisconnect 
 		try {
 			const displayAccess = await this.displayService.getDisplayAccessByDepartment(departmentId)
 			if (displayAccess) {
-				// Debug announcement data
-				console.log("Display announcement data:", data)
+				// Generate announcement text
+				const announcementText = `الرقم ${data.queueNumber}، الرجاء التوجه إلى نافذة الخدمة رقم ${data.counter}`
 
+				// Generate audio using Polly
+				const audioBuffer = await this.pollyService.synthesizeSpeech(announcementText)
+				const audioBase64 = audioBuffer.toString("base64")
+
+				// Emit with audio
 				this.server.to(`display:${displayAccess.access_code}`).emit("display:announce", {
-					queueNumber: data.queueNumber, // Include queue number
+					queueNumber: data.queueNumber,
 					fileNumber: data.fileNumber,
-					name: data.patientName, // Frontend expects 'name'
+					name: data.name,
 					counter: data.counter,
+					audio: audioBase64, // Add audio
+					text: announcementText, // Add text
 				})
 			}
 		} catch (error) {
