@@ -16,6 +16,7 @@
 		"pm2:monitor": "pm2 monit"
 	},
 	"dependencies": {
+		"@aws-sdk/client-polly": "^3.743.0",
 		"@jorgebodega/typeorm-seeding": "^7.1.0",
 		"@modelcontextprotocol/sdk": "^1.4.1",
 		"@nestjs/bull": "^11.0.0",
@@ -31,7 +32,6 @@
 		"@nestjs/typeorm": "^11.0.0",
 		"@nestjs/websockets": "^11.0.6",
 		"@types/bcrypt": "^5.0.2",
-		"aws-sdk": "^2.1692.0",
 		"bcrypt": "^5.1.1",
 		"bcryptjs": "^2.4.3",
 		"bull": "^4.16.5",

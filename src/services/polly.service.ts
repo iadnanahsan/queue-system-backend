@@ -1,14 +1,14 @@
 import {Injectable} from "@nestjs/common"
-import * as AWS from "aws-sdk"
+import {Polly, SynthesizeSpeechCommand} from "@aws-sdk/client-polly"
 import {ConfigService} from "@nestjs/config"
 
 @Injectable()
 export class PollyService {
-	private polly: AWS.Polly
+	private polly: Polly
 	private readonly cache: Map<string, Buffer> = new Map()
 
 	constructor(private configService: ConfigService) {
-		this.polly = new AWS.Polly({
+		this.polly = new Polly({
 			region: configService.get<string>("AWS_REGION"),
 			credentials: {
 				accessKeyId: configService.get<string>("AWS_ACCESS_KEY"),
@@ -26,17 +26,18 @@ export class PollyService {
 				return this.cache.get(cacheKey).toString("base64")
 			}
 
-			const params = {
-				Engine: this.configService.get<string>("AWS_POLLY_ENGINE"),
+			const command = new SynthesizeSpeechCommand({
+				Engine: "neural",
 				Text: text,
 				OutputFormat: "mp3",
-				VoiceId: this.configService.get<string>("AWS_POLLY_VOICE_ID"),
-				LanguageCode: this.configService.get<string>("AWS_POLLY_LANGUAGE_CODE"),
+				VoiceId: "Hala",
+				LanguageCode: "arb",
 				TextType: "text",
-			}
+			})
 
-			const {AudioStream} = await this.polly.synthesizeSpeech(params).promise()
-			const audioBuffer = Buffer.from(AudioStream as Buffer)
+			const response = await this.polly.send(command)
+			const audioStream = await response.AudioStream.transformToByteArray()
+			const audioBuffer = Buffer.from(audioStream)
 
 			// Cache the audio
 			this.cache.set(cacheKey, audioBuffer)
