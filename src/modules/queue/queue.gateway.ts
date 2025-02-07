@@ -11,6 +11,7 @@ import {WsJwtAuthGuard} from "../auth/guards/ws-jwt-auth.guard"
 import {QueueEntry} from "./entities/queue-entry.entity"
 import {QueueStatus} from "./enums/queue-status.enum"
 import {DisplayGateway} from "../display/display.gateway"
+import {QueueAnnouncement} from "./interfaces/queue-events.interface"
 
 interface QueueUpdate {
 	type: "STATUS_UPDATE" | "NEW_ENTRY" | "COMPLETED"
@@ -157,14 +158,7 @@ export class QueueGateway implements OnGatewayConnection, OnGatewayDisconnect {
 	// - Counter assignments
 	// - No-show marking
 
-	async emitAnnouncement(
-		departmentId: string,
-		data: {
-			queueNumber: string
-			counter: number
-			patientName: string
-		}
-	) {
+	async emitAnnouncement(departmentId: string, data: QueueAnnouncement) {
 		// Debug announcement data
 		console.log("Emitting announcement:", data)
 

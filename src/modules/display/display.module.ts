@@ -7,9 +7,10 @@ import {Department} from "../../entities/department.entity"
 import {QueueEntry} from "../../entities/queue-entry.entity"
 import {RedisService} from "../../services/redis.service"
 import {DisplayController} from "./display.controller"
+import {SharedModule} from "../shared/shared.module"
 
 @Module({
-	imports: [TypeOrmModule.forFeature([DisplayAccess, Department, QueueEntry])],
+	imports: [TypeOrmModule.forFeature([DisplayAccess, Department, QueueEntry]), SharedModule],
 	controllers: [DisplayController],
 	providers: [DisplayGateway, DisplayService, RedisService],
 	exports: [DisplayService, DisplayGateway],

@@ -9,6 +9,7 @@ import {Server, Socket} from "socket.io"
 import {UseGuards} from "@nestjs/common"
 import {WsJwtAuthGuard} from "../auth/guards/ws-jwt-auth.guard"
 import {DisplayService} from "./display.service"
+import {PollyService} from "../../services/polly.service"
 
 @WebSocketGateway({
 	cors: {
@@ -18,7 +19,7 @@ import {DisplayService} from "./display.service"
 	namespace: "display",
 })
 export class DisplayGateway implements OnGatewayConnection, OnGatewayDisconnect {
-	constructor(private readonly displayService: DisplayService) {}
+	constructor(private readonly displayService: DisplayService, private readonly pollyService: PollyService) {}
 
 	@WebSocketServer()
 	server: Server
@@ -103,14 +104,15 @@ export class DisplayGateway implements OnGatewayConnection, OnGatewayDisconnect 
 		try {
 			const displayAccess = await this.displayService.getDisplayAccessByDepartment(departmentId)
 			if (displayAccess) {
-				// Debug announcement data
-				console.log("Display announcement data:", data)
+				// Generate audio announcement
+				const audioData = await this.pollyService.generateAnnouncement(data.queueNumber, data.counter)
 
 				this.server.to(`display:${displayAccess.access_code}`).emit("display:announce", {
-					queueNumber: data.queueNumber, // Include queue number
+					queueNumber: data.queueNumber,
 					fileNumber: data.fileNumber,
-					name: data.patientName, // Frontend expects 'name'
+					name: data.patientName,
 					counter: data.counter,
+					audioData, // Include base64 audio data
 				})
 			}
 		} catch (error) {

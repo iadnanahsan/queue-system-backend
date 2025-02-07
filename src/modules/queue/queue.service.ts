@@ -966,6 +966,14 @@ export class QueueService {
 			console.log("Found counter:", counter)
 
 			entry.counter = counter
+
+			// Trigger announcement when status changes to serving
+			await this.queueGateway.emitAnnouncement(entry.departmentId, {
+				queueNumber: entry.queueNumber,
+				counter: counter.number,
+				patientName: entry.patientName,
+				fileNumber: entry.fileNumber,
+			})
 		}
 
 		// Save and verify
