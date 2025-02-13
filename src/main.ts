@@ -56,13 +56,19 @@ async function bootstrap() {
 	// Add WebSocket adapter
 	app.useWebSocketAdapter(new IoAdapter(app))
 
-	// Enable CORS for WebSocket
+	// Updated CORS configuration
 	app.enableCors({
 		origin: ["https://queue.mchd-manager.com", "http://localhost:3000", "http://localhost:5000"],
 		methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
 		credentials: true,
-		allowedHeaders: ["Authorization", "Content-Type", "X-System-Reset-Key"],
-		exposedHeaders: ["X-System-Reset-Key"],
+		allowedHeaders: [
+			"authorization",
+			"content-type",
+			"x-system-reset-key", // lowercase is important
+		],
+		exposedHeaders: ["x-system-reset-key"],
+		preflightContinue: false,
+		optionsSuccessStatus: 204,
 	})
 
 	// Apply global filters
