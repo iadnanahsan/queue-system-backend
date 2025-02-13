@@ -58,10 +58,11 @@ async function bootstrap() {
 
 	// Enable CORS for WebSocket
 	app.enableCors({
-		origin: ["https://queue.mchd-manager.com", "http://localhost:5000"],
+		origin: ["https://queue.mchd-manager.com", "http://localhost:3000", "http://localhost:5000"],
 		methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
 		credentials: true,
-		allowedHeaders: ["Authorization", "Content-Type"],
+		allowedHeaders: ["Authorization", "Content-Type", "X-System-Reset-Key"],
+		exposedHeaders: ["X-System-Reset-Key"],
 	})
 
 	// Apply global filters
