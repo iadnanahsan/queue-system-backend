@@ -9,6 +9,7 @@ import {QueueModule} from "./modules/queue/queue.module"
 import {SeedModule} from "./modules/seed/seed.module"
 import {BullModule} from "@nestjs/bull"
 import {AdminModule} from "./modules/admin/admin.module"
+import {SystemModule} from "./modules/system/system.module"
 // Import entities from the entities folder
 import {User} from "./entities/user.entity"
 import {Department} from "./entities/department.entity"
@@ -54,6 +55,7 @@ import {QueueEntry} from "./entities/queue-entry.entity"
 			inject: [ConfigService],
 		}),
 		AdminModule,
+		SystemModule,
 	],
 })
 export class AppModule {}
