@@ -10,6 +10,7 @@ import {QueueGateway} from "./queue.gateway"
 import {RedisService} from "../../services/redis.service"
 import {BullModule} from "@nestjs/bull"
 import {QueueNumberService} from "./services/queue-number.service"
+import {QueueStateService} from "./services/queue-state.service"
 import {AuthModule} from "../auth/auth.module"
 import {ScheduleModule} from "@nestjs/schedule"
 import {DisplayModule} from "../display/display.module"
@@ -25,7 +26,7 @@ import {DisplayModule} from "../display/display.module"
 		DisplayModule,
 	],
 	controllers: [QueueController],
-	providers: [QueueService, QueueGateway, RedisService, QueueNumberService],
+	providers: [QueueService, QueueGateway, RedisService, QueueNumberService, QueueStateService],
 	exports: [QueueService, QueueGateway],
 })
 export class QueueModule {}

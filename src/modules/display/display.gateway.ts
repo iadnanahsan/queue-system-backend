@@ -10,7 +10,8 @@ import {UseGuards} from "@nestjs/common"
 import {WsJwtAuthGuard} from "../auth/guards/ws-jwt-auth.guard"
 import {DisplayService} from "./display.service"
 import {PollyService} from "./polly.service"
-import {Injectable} from "@nestjs/common"
+import {Injectable, Logger} from "@nestjs/common"
+import {DisplayType} from "./enums/display-type.enum"
 
 @Injectable()
 @WebSocketGateway({
@@ -28,8 +29,8 @@ export class DisplayGateway implements OnGatewayConnection, OnGatewayDisconnect 
 
 	private connectedDisplays = new Map<string, Set<string>>() // code -> Set of socket IDs
 
-	private debug(message: string, ...args: any[]) {
-		console.log(`[DisplayGateway] ${message}`, ...args)
+	private debug(message: string) {
+		console.log(`[DisplayGateway] ${message}`)
 	}
 
 	async handleConnection(client: Socket) {
@@ -56,61 +57,98 @@ export class DisplayGateway implements OnGatewayConnection, OnGatewayDisconnect 
 
 	@SubscribeMessage("display:join")
 	async handleJoinDisplay(client: Socket, accessCode: string) {
+		this.debug(`Join attempt with code: ${accessCode}`)
+
 		if (!accessCode) {
 			client.emit("display:error", "Access code required")
 			return
 		}
 
 		try {
-			// Just join the room with access code
 			await client.join(`display:${accessCode}`)
 			this.debug(`Client ${client.id} joined display: ${accessCode}`)
-
 			client.emit("display:joined", {success: true, room: accessCode})
 		} catch (error) {
+			this.debug(`Join error: ${error instanceof Error ? error.message : String(error)}`)
 			client.emit("display:error", "Invalid access code")
 		}
 	}
 
 	async handleQueueUpdate(departmentId: string, accessCode: string) {
+		this.debug(`Queue update for department: ${departmentId}, code: ${accessCode}`)
+
 		try {
 			// Get display data
 			const display = await this.displayService.getDepartmentDisplay(departmentId, accessCode)
 
-			// Emit to specific room
+			// Get all departments display if it exists
+			const allDeptDisplays = await this.displayService.getDisplayAccessByType(DisplayType.ALL_DEPARTMENTS)
+
+			// Emit to specific department room
+			this.debug(`Emitting to department room: display:${accessCode}`)
 			this.server.to(`display:${accessCode}`).emit("display:update", display)
+
+			// If all departments display exists, emit to that room too
+			if (allDeptDisplays && allDeptDisplays.length > 0) {
+				const allDeptDisplay = await this.displayService.getAllDepartmentsDisplay(
+					allDeptDisplays[0].access_code
+				)
+				this.debug(`Emitting to all departments room: display:${allDeptDisplays[0].access_code}`)
+				this.server.to(`display:${allDeptDisplays[0].access_code}`).emit("display:update", allDeptDisplay)
+			}
 		} catch (error) {
-			this.debug(`Error updating display: ${error}`)
+			this.debug(`Error updating display: ${error instanceof Error ? error.message : String(error)}`)
+			console.error("Full error details:", error)
 		}
 	}
 
 	// Called by QueueGateway when queue updates happen
 	async emitDisplayUpdate(departmentId: string, data: any) {
 		try {
-			if (data.type === "ANNOUNCEMENT") {
-				// Generate announcement text
-				const announcementText = `الرقم ${data.queueNumber}، الرجاء التوجه إلى نافذة الخدمة رقم ${data.counter}`
+			this.debug(`Emitting update for department: ${departmentId}`)
 
-				// Generate audio using Polly
-				const audioBuffer = await this.pollyService.synthesizeSpeech(announcementText)
+			// Get department-specific display
+			const departmentDisplay = await this.displayService.getDisplayAccessByDepartment(departmentId)
 
-				// Convert buffer to base64
-				const audioBase64 = audioBuffer.toString("base64")
+			// Track emitted codes to prevent duplicates
+			const emittedCodes = new Set<string>()
 
-				// Emit announcement with audio
-				this.server.to(`department-${departmentId}`).emit("display:announce", {
-					...data,
-					audio: audioBase64,
-					text: announcementText,
-				})
-			} else {
-				// Handle other display updates as before
-				this.server.to(`department-${departmentId}`).emit("display:update", data)
+			// If this is a serving status update, get the counter number
+			const updateData = {
+				...data,
+				departmentId,
 			}
+
+			// If we have counter ID, get its number
+			if (data.status === "serving" && data.counter) {
+				const counter = await this.displayService.getCounterById(data.counter)
+				if (counter) {
+					updateData.counter = counter.number // Use counter.number instead of counter.id
+				}
+			}
+
+			// Emit to department-specific display if exists
+			if (departmentDisplay) {
+				this.debug(`Emitting to department display: ${departmentDisplay.access_code}`)
+				this.server.to(`display:${departmentDisplay.access_code}`).emit("display:update", updateData)
+				emittedCodes.add(departmentDisplay.access_code)
+			}
+
+			// Get and emit to all-departments displays that haven't received the update
+			const allDepartmentDisplays = await this.displayService.getDisplayAccessByType(DisplayType.ALL_DEPARTMENTS)
+
+			for (const display of allDepartmentDisplays) {
+				if (!emittedCodes.has(display.access_code)) {
+					this.debug(`Emitting to all-departments display: ${display.access_code}`)
+					this.server.to(`display:${display.access_code}`).emit("display:update", updateData)
+					emittedCodes.add(display.access_code)
+				}
+			}
+
+			this.debug(`Update emitted to ${emittedCodes.size} unique displays`)
 		} catch (error) {
-			console.error("Error in emitDisplayUpdate:", error)
-			// Fallback to normal announcement without audio
-			this.server.to(`department-${departmentId}`).emit("display:announce", data)
+			this.debug(`Error in emitDisplayUpdate: ${error instanceof Error ? error.message : String(error)}`)
+			console.error("Full error details:", error)
 		}
 	}
 
@@ -120,6 +158,7 @@ export class DisplayGateway implements OnGatewayConnection, OnGatewayDisconnect 
 			const displayAccess = await this.displayService.getDisplayAccessByDepartment(departmentId)
 
 			if (displayAccess) {
+				// Original Arabic announcement
 				const announcementText = `الرقم ${data.queueNumber}، الرجاء التوجه إلى نافذة الخدمة رقم ${data.counter}`
 				console.log("1. Generated announcement text:", announcementText)
 

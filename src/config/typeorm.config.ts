@@ -1,29 +1,36 @@
-import "reflect-metadata"
 import {DataSource, DataSourceOptions} from "typeorm"
-import * as dotenv from "dotenv"
-import {User} from "../entities/user.entity"
+import {config} from "dotenv"
 import {Department} from "../entities/department.entity"
+import {QueueEntry} from "../modules/queue/entities/queue-entry.entity"
 import {Counter} from "../entities/counter.entity"
-import {QueueEntry} from "../entities/queue-entry.entity"
 import {DisplayAccessCode} from "../entities/display-access-code.entity"
+import {User} from "../entities/user.entity"
 
-dotenv.config()
+// Load env file first
+config()
 
-export const dataSourceOptions: DataSourceOptions = {
+// Add debug logging
+console.log("DB Config:", {
+	host: process.env.POSTGRES_HOST,
+	port: parseInt(process.env.POSTGRES_PORT || "5432"),
+	database: process.env.POSTGRES_DB,
+	username: process.env.POSTGRES_USER,
+	// Don't log password
+})
+
+const options: DataSourceOptions = {
 	type: "postgres",
 	host: process.env.POSTGRES_HOST,
-	port: parseInt(process.env.POSTGRES_PORT || "5432", 10),
+	port: parseInt(process.env.POSTGRES_PORT || "5432"),
 	username: process.env.POSTGRES_USER,
 	password: process.env.POSTGRES_PASSWORD,
 	database: process.env.POSTGRES_DB,
-	entities: [User, Department, Counter, QueueEntry, DisplayAccessCode],
+	entities: [Department, QueueEntry, Counter, DisplayAccessCode, User],
 	migrations: ["src/migrations/*.ts"],
-	migrationsTableName: "migrations",
 	synchronize: false,
-	logging: true,
 }
 
-const dataSource = new DataSource(dataSourceOptions)
+const dataSource = new DataSource(options)
 
 // Initialize the DataSource
 dataSource

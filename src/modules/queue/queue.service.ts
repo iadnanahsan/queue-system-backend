@@ -1,6 +1,6 @@
 import {Injectable, NotFoundException, BadRequestException, InternalServerErrorException} from "@nestjs/common"
 import {InjectRepository} from "@nestjs/typeorm"
-import {Repository, FindOptionsWhere, In, IsNull, EntityManager} from "typeorm"
+import {Repository, FindOptionsWhere, In, IsNull, EntityManager, DataSource} from "typeorm"
 import {QueueEntry} from "./entities/queue-entry.entity"
 import {Department} from "../../entities/department.entity"
 import {Counter} from "../../entities/counter.entity"
@@ -19,6 +19,7 @@ import {GetQueueMetricsDto} from "./dto/get-queue-metrics.dto"
 import {User} from "../../entities/user.entity"
 import {RedisQueueMetrics} from "./dto/queue-metrics.dto"
 import {DisplayService} from "../display/display.service"
+import {QueueStateService} from "./services/queue-state.service"
 
 @Injectable()
 export class QueueService {
@@ -38,7 +39,9 @@ export class QueueService {
 		private readonly displayGateway: DisplayGateway,
 		@InjectRepository(User)
 		private userRepository: Repository<User>,
-		private displayService: DisplayService
+		private displayService: DisplayService,
+		private queueStateService: QueueStateService,
+		private dataSource: DataSource
 	) {}
 
 	private async generateQueueNumber(departmentId: string): Promise<string> {
@@ -579,56 +582,88 @@ export class QueueService {
 	}
 
 	async getCounterQueueDetails(counterId: number, departmentId: string) {
-		// First get the counter and validate it belongs to the right department
-		const counter = await this.counterRepository.findOne({
-			where: {
-				id: counterId,
-				department_id: departmentId, // Add this condition
-			},
-			relations: ["department"],
-		})
+		const queryRunner = this.dataSource.createQueryRunner()
+		await queryRunner.connect()
+		await queryRunner.startTransaction()
 
-		if (!counter) {
-			throw new NotFoundException("Counter not found or does not belong to this department")
-		}
+		try {
+			// Get department info first
+			const department = await queryRunner.manager.findOne(Department, {
+				where: {id: departmentId},
+				select: ["id", "name_en", "name_ar"],
+			})
 
-		// Get currently serving patient at THIS counter only
-		const current = await this.queueRepository.findOne({
-			where: {
-				counterId,
-				departmentId, // Add department check
-				status: QueueStatus.SERVING,
-			},
-			relations: ["department"],
-		})
+			if (!department) {
+				throw new NotFoundException("Department not found")
+			}
 
-		// Get waiting patients only from THIS department
-		const queue = await this.queueRepository.find({
-			where: {
-				departmentId, // This was correct but now more explicit
-				status: QueueStatus.WAITING,
-				counterId: IsNull(),
-			},
-			order: {
-				createdAt: "ASC",
-			},
-			relations: ["department"],
-		})
+			// Get all active counters for this department
+			const activeCounters = await queryRunner.manager.find(Counter, {
+				where: {
+					department_id: departmentId,
+					is_active: true,
+				},
+				select: ["id", "number"],
+				order: {number: "ASC"}, // Order by counter number
+			})
 
-		return {
-			current: current
-				? {
-						...current,
-						department: current.department,
-						counter: current.counterId ? counter : null,
-				  }
-				: null,
-			queue: queue.map((entry) => ({
-				...entry,
-				department: entry.department,
-				counter: entry.counterId ? counter : null,
-			})),
-			counter,
+			// Get serving queues for all counters
+			const servingQueues = await queryRunner.manager.find(QueueEntry, {
+				where: {
+					departmentId,
+					status: QueueStatus.SERVING,
+				},
+				select: ["id", "queueNumber", "patientName", "status", "counterId"],
+				order: {servedAt: "ASC"},
+			})
+
+			// Get waiting queue
+			const waitingQueue = await queryRunner.manager.find(QueueEntry, {
+				where: {
+					departmentId,
+					status: QueueStatus.WAITING,
+				},
+				select: ["id", "queueNumber", "patientName", "status"],
+				order: {createdAt: "ASC"},
+			})
+
+			await queryRunner.commitTransaction()
+
+			// Structure response with department at top level
+			return {
+				department: {
+					id: department.id,
+					name_en: department.name_en,
+					name_ar: department.name_ar,
+					counters: activeCounters.map((counter) => {
+						const serving = servingQueues.find((q) => q.counterId === counter.id)
+						return {
+							id: counter.id,
+							number: counter.number,
+							current_serving: serving
+								? {
+										id: serving.id,
+										queueNumber: serving.queueNumber,
+										patientName: serving.patientName,
+										status: QueueStatus.SERVING,
+								  }
+								: null,
+						}
+					}),
+					waiting_queue: waitingQueue.map((queue) => ({
+						id: queue.id,
+						queueNumber: queue.queueNumber,
+						patientName: queue.patientName,
+						status: QueueStatus.WAITING,
+					})),
+				},
+			}
+		} catch (error) {
+			await queryRunner.rollbackTransaction()
+			console.error("Error getting counter queue details:", error)
+			throw error
+		} finally {
+			await queryRunner.release()
 		}
 	}
 
@@ -980,5 +1015,24 @@ export class QueueService {
 		console.log("Reloaded entry:", reloaded)
 
 		return reloaded
+	}
+
+	async releaseCounter(counterId: number) {
+		await this.queueStateService.clearCounterState(counterId)
+		return {success: true}
+	}
+
+	async selectCounter(counterId: number, departmentId: string) {
+		await this.queueStateService.syncCounterState(counterId, departmentId)
+
+		const counter = await this.counterRepository.findOne({
+			where: {id: counterId},
+		})
+
+		return {
+			success: true,
+			counterId: counter.id,
+			counterNo: counter.number,
+		}
 	}
 }

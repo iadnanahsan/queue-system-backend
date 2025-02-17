@@ -1,24 +1,43 @@
 import {Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn} from "typeorm"
 import {Department} from "../../../entities/department.entity"
+import {DisplayType} from "../enums/display-type.enum"
 
 @Entity("display_access_codes")
 export class DisplayAccess {
 	@PrimaryGeneratedColumn("uuid")
 	id: string
 
-	@Column({name: "department_id"})
-	departmentId: string  // Can be UUID or "all"
+	@Column({
+		name: "department_id",
+		type: "uuid",
+		nullable: true,
+	})
+	departmentId: string | null
 
-	@Column({length: 6, unique: true})
-	access_code: string // Following schema from docs
+	@Column({
+		name: "access_code",
+		length: 10,
+		unique: true,
+	})
+	access_code: string
 
-	@Column({default: true})
+	@Column({
+		name: "display_type",
+		type: "enum",
+		enum: DisplayType,
+	})
+	display_type: DisplayType
+
+	@Column({
+		name: "is_active",
+		default: true,
+	})
 	is_active: boolean
 
-	@CreateDateColumn({name: "created_at"})
+	@CreateDateColumn()
 	created_at: Date
 
-	@ManyToOne(() => Department)
+	@ManyToOne(() => Department, {nullable: true})
 	@JoinColumn({name: "department_id"})
 	department: Department
 }

@@ -20,65 +20,105 @@ export class DisplayController {
 	@Roles("admin")
 	@HttpCode(HttpStatus.CREATED)
 	@ApiOperation({
-		summary: "Generate display access code",
-		description: "Generate access code for specific department or all departments",
+		summary: "Generate new display access code",
+		description: `Generates an access code for display screens. 
+			Can create either department-specific or all-departments display codes.
+			Only one active code per department is allowed.`,
+	})
+	@ApiResponse({
+		status: HttpStatus.CREATED,
+		description: "Display access code generated successfully",
+		schema: {
+			example: {
+				id: "uuid",
+				departmentId: "123e4567-e89b-12d3-a456-426614174000",
+				access_code: "ABC123",
+				display_type: "department_specific",
+				is_active: true,
+				created_at: "2024-01-31T10:00:00Z",
+			},
+		},
+	})
+	@ApiResponse({
+		status: HttpStatus.BAD_REQUEST,
+		description: "Department already has an active code",
+		schema: {
+			example: {
+				message: "Department already has an active code: XYZ789. Please deactivate it first.",
+				error: "Bad Request",
+				statusCode: 400,
+			},
+		},
 	})
 	async generateCode(@Body() dto: GenerateDisplayCodeDto) {
-		return this.displayService.generateAccessCode(dto.department_id)
+		return this.displayService.generateAccessCode(dto)
 	}
 
 	@Get("queue")
 	@Public()
 	@ApiOperation({
-		summary: "Access department display screen",
-		description: "Access department's public waiting area display using access code",
+		summary: "Access display screen",
+		description: "Returns queue data based on display type determined by the access code",
 	})
 	@ApiQuery({
 		name: "code",
 		required: true,
-		description: "Department display access code",
+		description: "Display access code",
+		example: "ABC123",
 	})
 	@ApiResponse({
 		status: 200,
-		description: "Department queue display data",
-		type: DepartmentQueueDisplay,
-	})
-	async getQueueDisplay(@Query("code") code: string) {
-		return this.displayService.getQueueDisplayByCode(code)
-	}
-
-	@Get("queue/all")
-	@Public()
-	@HttpCode(HttpStatus.OK)
-	@ApiOperation({summary: "Get all departments queue data"})
-	@ApiResponse({
-		status: HttpStatus.OK,
-		description: "All departments display data",
-		schema: {
-			example: {
-				departments: [
-					{
-						departmentId: "uuid",
-						name_en: "Patient Affairs",
-						name_ar: "شؤون المرضى",
-						queues: [
-							{
-								counter: 1,
-								current: {
-									queueNumber: "A001",
-									patientName: "John Doe",
-									counter: 1,
-									status: "called",
-								},
+		description: "Queue display data",
+		content: {
+			"application/json": {
+				examples: {
+					department_specific: {
+						value: {
+							department: {
+								name_en: "Patient Affairs",
+								name_ar: "شؤون المرضى",
 							},
-						],
+							serving: [
+								{
+									queueNumber: "A001",
+									counter: 1,
+									status: "serving",
+								},
+							],
+							waiting: [
+								{
+									queueNumber: "A002",
+									status: "waiting",
+								},
+							],
+						},
+						description: "Department-specific display data",
 					},
-				],
+					all_departments: {
+						value: {
+							departments: [
+								{
+									id: "dept-1",
+									name_en: "Patient Affairs",
+									queues: [
+										/* same structure as above */
+									],
+								},
+								{
+									id: "dept-2",
+									name_en: "Laboratory",
+									queues: [],
+								},
+							],
+						},
+						description: "All-departments display data",
+					},
+				},
 			},
 		},
 	})
-	async getAllDepartmentsDisplay(@Query("code") code: string) {
-		return this.displayService.getAllDepartmentsDisplay(code)
+	async getQueueDisplay(@Query("code") code: string) {
+		return this.displayService.getQueueDisplayByCode(code)
 	}
 
 	@Patch("code/:id")

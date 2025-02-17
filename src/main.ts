@@ -58,7 +58,12 @@ async function bootstrap() {
 
 	// Updated CORS configuration
 	app.enableCors({
-		origin: ["https://queue.mchd-manager.com", "http://localhost:3000", "http://localhost:5000"],
+		origin: [
+			"https://queue.mchd-manager.com",
+			"http://localhost:3000",
+			"http://localhost:5000",
+			"https://hqs-vercel.vercel.app",
+		],
 		methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
 		credentials: true,
 		allowedHeaders: [
