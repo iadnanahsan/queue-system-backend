@@ -607,13 +607,13 @@ export class QueueService {
 				order: {number: "ASC"}, // Order by counter number
 			})
 
-			// Get serving queues for all counters
+			// Get all serving queues for department
 			const servingQueues = await queryRunner.manager.find(QueueEntry, {
 				where: {
 					departmentId,
 					status: QueueStatus.SERVING,
 				},
-				select: ["id", "queueNumber", "patientName", "status", "counterId"],
+				select: ["id", "queueNumber", "patientName", "status", "counterId", "fileNumber"],
 				order: {servedAt: "ASC"},
 			})
 
@@ -623,7 +623,7 @@ export class QueueService {
 					departmentId,
 					status: QueueStatus.WAITING,
 				},
-				select: ["id", "queueNumber", "patientName", "status"],
+				select: ["id", "queueNumber", "patientName", "status", "fileNumber"],
 				order: {createdAt: "ASC"},
 			})
 
@@ -645,6 +645,7 @@ export class QueueService {
 										id: serving.id,
 										queueNumber: serving.queueNumber,
 										patientName: serving.patientName,
+										fileNumber: serving.fileNumber,
 										status: QueueStatus.SERVING,
 								  }
 								: null,
@@ -654,6 +655,7 @@ export class QueueService {
 						id: queue.id,
 						queueNumber: queue.queueNumber,
 						patientName: queue.patientName,
+						fileNumber: queue.fileNumber,
 						status: QueueStatus.WAITING,
 					})),
 				},

@@ -1,3 +1,10 @@
+import axios, {AxiosError} from "axios"
+import * as fs from "fs"
+
+// Configuration
+const API_URL = "http://localhost:5000"
+const TOTAL_PATIENTS_PER_DEPT = 100
+
 // Department configs
 const departments = [
 	{
@@ -20,80 +27,161 @@ const departments = [
 	},
 ]
 
-import axios, {AxiosError} from "axios"
-import * as fs from "fs"
-import {DataSource} from "typeorm"
-import {QueueEntry} from "../modules/queue/entities/queue-entry.entity"
-import {Department} from "../entities/department.entity"
-import {Counter} from "../entities/counter.entity"
-import {DisplayAccessCode} from "../entities/display-access-code.entity"
-import {User} from "../entities/user.entity"
-import {config} from "dotenv"
+// Breaking Bad Universe Names (expanded)
+const characterNames = [
+	"Walter White",
+	"Jesse Pinkman",
+	"Skyler White",
+	"Hank Schrader",
+	"Saul Goodman",
+	"Gus Fring",
+	"Mike Ehrmantraut",
+	"Kim Wexler",
+	"Chuck McGill",
+	"Howard Hamlin",
+	"Nacho Varga",
+	"Lalo Salamanca",
+	"Tuco Salamanca",
+	"Hector Salamanca",
+	"Jane Margolis",
+	"Todd Alquist",
+	"Lydia Rodarte-Quayle",
+	"Huell Babineaux",
+	"Ted Beneke",
+	"Skinny Pete",
+	"Badger",
+	"Andrea Cantillo",
+	"Brock Cantillo",
+	"Carmen Molina",
+	"Don Eladio",
+	"Domingo Gallardo",
+	"Elliott Schwartz",
+	"Gretchen Schwartz",
+	"Steven Gomez",
+	"Marie Schrader",
+	"Victor",
+	"Tyrus Kitt",
+	"Marco Salamanca",
+	"Leonel Salamanca",
+	"Gale Boetticher",
+	"Craig Kettleman",
+	"Betsy Kettleman",
+	"Ernesto",
+	"Cliff Main",
+	"Rich Schweikart",
+	"Paige Novick",
+	"Viola Goto",
+	"Erin Brill",
+	"Omar",
+	"Francesca Liddy",
+]
 
-// Load environment variables
-config()
+// Generate unique file numbers
+function generateFileNumber() {
+	return `F${Math.floor(10000 + Math.random() * 90000)}`
+}
 
-// Create TypeORM DataSource
-const AppDataSource = new DataSource({
-	type: "postgres",
-	host: process.env.POSTGRES_HOST,
-	port: parseInt(process.env.POSTGRES_PORT || "5432"),
-	username: process.env.POSTGRES_USER,
-	password: process.env.POSTGRES_PASSWORD,
-	database: process.env.POSTGRES_DB,
-	entities: [Department, QueueEntry, Counter, DisplayAccessCode, User],
-	synchronize: false,
-})
-
-async function removePatients() {
+async function login() {
 	try {
-		console.log("Starting patient removal process...")
+		const response = await axios.post(`${API_URL}/auth/login`, {
+			username: "Receptionist",
+			password: "Receptionist123",
+		})
+		return response.data.access_token
+	} catch (error) {
+		if (error instanceof AxiosError) {
+			console.error("Login failed:", error.response?.data || error.message)
+		}
+		throw error
+	}
+}
 
-		// Initialize the connection
-		const connection = await AppDataSource.initialize()
+async function createPatient(token: string, data: any) {
+	try {
+		const response = await axios.post(
+			`${API_URL}/queue/register`,
+			{
+				department_id: data.departmentId,
+				file_number: data.fileNumber,
+				patient_name: data.patientName,
+			},
+			{
+				headers: {Authorization: `Bearer ${token}`},
+			}
+		)
+		return response.data
+	} catch (error) {
+		if (error instanceof AxiosError) {
+			console.error(`Failed to create patient ${data.patientName}:`, error.response?.data || error.message)
+		}
+		fs.appendFileSync("failed_entries.log", JSON.stringify(data) + "\n")
+		return null
+	}
+}
+
+async function generatePatients() {
+	try {
+		console.log("Starting patient generation...")
+		const token = await login()
+
+		const usedFileNumbers = new Set<string>()
+		const usedNames = new Set<string>()
 
 		for (const dept of departments) {
-			console.log(`\nProcessing ${dept.name_en}...`)
+			console.log(`\nGenerating patients for ${dept.name_en}...`)
+			let created = 0
+			let retries = 0
+			const maxRetries = 3
 
-			// First, let's count total patients in this department
-			const countResult = await connection.query(
-				`SELECT COUNT(*) as total FROM queue_entries WHERE department_id = $1`,
-				[dept.id]
-			)
-			const totalPatients = parseInt(countResult[0].total)
+			while (created < TOTAL_PATIENTS_PER_DEPT && retries < maxRetries) {
+				const batch = Math.min(20, TOTAL_PATIENTS_PER_DEPT - created) // Smaller batch size
+				const promises = []
 
-			// Now delete all except the first 50
-			const result = await connection.query(
-				`
-                WITH RankedPatients AS (
-                    SELECT id, 
-                           ROW_NUMBER() OVER (ORDER BY created_at ASC) as rn
-                    FROM queue_entries
-                    WHERE department_id = $1
-                )
-                DELETE FROM queue_entries
-                WHERE id IN (
-                    SELECT id 
-                    FROM RankedPatients 
-                    WHERE rn > 50
-                )
-                RETURNING id;
-            `,
-				[dept.id]
-			)
+				for (let i = 0; i < batch; i++) {
+					let fileNumber
+					do {
+						fileNumber = generateFileNumber()
+					} while (usedFileNumbers.has(fileNumber))
+					usedFileNumbers.add(fileNumber)
 
-			const removedCount = result.length
-			const remainingCount = totalPatients - removedCount
-			console.log(`Department ${dept.name_en}:`)
-			console.log(`- Total patients before: ${totalPatients}`)
-			console.log(`- Patients removed: ${removedCount}`)
-			console.log(`- Patients remaining: ${remainingCount}`)
+					let uniqueName
+					do {
+						const baseName = characterNames[Math.floor(Math.random() * characterNames.length)]
+						uniqueName = `Patient ${baseName} ${Math.floor(Math.random() * 1000)}`
+					} while (usedNames.has(uniqueName))
+					usedNames.add(uniqueName)
 
-			await new Promise((resolve) => setTimeout(resolve, 1000))
+					const patientData = {
+						patientName: uniqueName,
+						fileNumber: fileNumber,
+						departmentId: dept.id,
+					}
+
+					promises.push(createPatient(token, patientData))
+
+					// Add delay between requests in the same batch
+					await new Promise((resolve) => setTimeout(resolve, 100))
+				}
+
+				const results = await Promise.all(promises)
+				const successfulCreations = results.filter((r) => r !== null).length
+				created += successfulCreations
+
+				if (successfulCreations < batch) {
+					retries++
+					console.log(`Retry ${retries}/${maxRetries} for ${dept.name_en}`)
+					await new Promise((resolve) => setTimeout(resolve, 5000)) // Longer wait between retries
+				}
+
+				console.log(`Progress: ${created}/${TOTAL_PATIENTS_PER_DEPT} for ${dept.name_en}`)
+			}
+
+			// Wait between departments
+			await new Promise((resolve) => setTimeout(resolve, 3000))
+			console.log(`Completed ${dept.name_en}: ${created} patients created`)
 		}
 
-		await connection.destroy()
-		console.log("\nPatient removal completed!")
+		console.log("\nPatient generation completed!")
 	} catch (error) {
 		if (error instanceof Error) {
 			console.error("Script failed:", error.message)
@@ -103,4 +191,4 @@ async function removePatients() {
 }
 
 // Run the script
-removePatients()
+generatePatients()

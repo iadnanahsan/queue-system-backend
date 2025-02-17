@@ -69,7 +69,7 @@ export class DisplayGateway implements OnGatewayConnection, OnGatewayDisconnect 
 			this.debug(`Client ${client.id} joined display: ${accessCode}`)
 			client.emit("display:joined", {success: true, room: accessCode})
 		} catch (error) {
-			this.debug(`Join error: ${error instanceof Error ? error.message : String(error)}`)
+			this.debug(`Join error: ${error instanceof Error ? error.message : "Unknown error"}`)
 			client.emit("display:error", "Invalid access code")
 		}
 	}
@@ -155,33 +155,45 @@ export class DisplayGateway implements OnGatewayConnection, OnGatewayDisconnect 
 	async emitAnnouncement(departmentId: string, data: any) {
 		try {
 			console.log("Starting emitAnnouncement with data:", data)
-			const displayAccess = await this.displayService.getDisplayAccessByDepartment(departmentId)
+			// Get both department-specific and all-departments displays
+			const departmentDisplay = await this.displayService.getDisplayAccessByDepartment(departmentId)
+			const allDepartmentDisplays = await this.displayService.getDisplayAccessByType(DisplayType.ALL_DEPARTMENTS)
 
-			if (displayAccess) {
-				// Original Arabic announcement
-				const announcementText = `الرقم ${data.queueNumber}، الرجاء التوجه إلى نافذة الخدمة رقم ${data.counter}`
-				console.log("1. Generated announcement text:", announcementText)
+			// Generate announcement once
+			const announcementText = `الرقم ${data.queueNumber}، الرجاء التوجه إلى نافذة الخدمة رقم ${data.counter}`
+			console.log("1. Generated announcement text:", announcementText)
 
-				console.log("2. Calling Polly service...")
-				const audioBuffer = await this.pollyService.synthesizeSpeech(announcementText)
-				console.log("3. Got audio buffer of size:", audioBuffer.length)
+			console.log("2. Calling Polly service...")
+			const audioBuffer = await this.pollyService.synthesizeSpeech(announcementText)
+			console.log("3. Got audio buffer of size:", audioBuffer.length)
 
-				const audioBase64 = audioBuffer.toString("base64")
-				console.log("4. Converted to base64, first 50 chars:", audioBase64.substring(0, 50))
+			const audioBase64 = audioBuffer.toString("base64")
+			console.log("4. Converted to base64, first 50 chars:", audioBase64.substring(0, 50))
 
-				console.log("5. Emitting to room:", `display:${displayAccess.access_code}`)
-				this.server.to(`display:${displayAccess.access_code}`).emit("display:announce", {
-					queueNumber: data.queueNumber,
-					fileNumber: data.fileNumber,
-					name: data.name,
-					counter: data.counter,
-					audio: audioBase64,
-					text: announcementText,
-				})
-				console.log("6. Announcement emitted successfully")
-			} else {
-				console.log("No display access found for department:", departmentId)
+			// Prepare announcement payload
+			const announcement = {
+				queueNumber: data.queueNumber,
+				fileNumber: data.fileNumber,
+				counter: data.counter,
+				audio: audioBase64,
+				text: announcementText,
 			}
+
+			// Emit to department-specific display
+			if (departmentDisplay) {
+				console.log("5. Emitting to department room:", `display:${departmentDisplay.access_code}`)
+				this.server.to(`display:${departmentDisplay.access_code}`).emit("display:announce", announcement)
+			}
+
+			// Emit to all-departments displays
+			if (allDepartmentDisplays && allDepartmentDisplays.length > 0) {
+				for (const display of allDepartmentDisplays) {
+					console.log("5. Emitting to all-departments room:", `display:${display.access_code}`)
+					this.server.to(`display:${display.access_code}`).emit("display:announce", announcement)
+				}
+			}
+
+			console.log("6. Announcement emitted successfully")
 		} catch (error) {
 			console.error("Error in emitAnnouncement:", error)
 			this.debug(`Error emitting announcement: ${error}`)
