@@ -1,6 +1,6 @@
 import {Injectable, NotFoundException, UnauthorizedException, BadRequestException} from "@nestjs/common"
 import {InjectRepository} from "@nestjs/typeorm"
-import {Repository} from "typeorm"
+import {Repository, FindOperator, ArrayContains} from "typeorm"
 import {DisplayAccess} from "./entities/display-access.entity"
 import {RedisService} from "../../services/redis.service"
 import {DisplayGateway} from "./display.gateway"
@@ -13,6 +13,7 @@ import {In} from "typeorm"
 import {GenerateDisplayCodeDto} from "./dto/generate-display-code.dto"
 import {DisplayType} from "./enums/display-type.enum"
 import {Counter} from "../../entities/counter.entity"
+import {DisplayAccessValidator} from "./validators/display-access.validator"
 
 @Injectable()
 export class DisplayService {
@@ -27,66 +28,36 @@ export class DisplayService {
 		private queueEntryRepository: Repository<QueueEntry>,
 		private redisService: RedisService,
 		@InjectRepository(Counter)
-		private counterRepo: Repository<Counter>
+		private counterRepo: Repository<Counter>,
+		private displayAccessValidator: DisplayAccessValidator
 	) {}
 
 	async generateAccessCode(dto: GenerateDisplayCodeDto): Promise<DisplayAccess> {
-		// First check if any departments exist
-		const departmentCount = await this.departmentRepo.count()
-		if (departmentCount === 0) {
-			throw new BadRequestException("Cannot create display codes when no departments exist in the system")
+		try {
+			// This validation should run first and prevent duplicates
+			await this.displayAccessValidator.validateNewDisplay(dto.display_type, dto.departmentIds)
+
+			// Validate departments if not ALL_DEPARTMENTS type
+			if (dto.display_type !== DisplayType.ALL_DEPARTMENTS) {
+				// Validate that all departments exist
+				const departments = await this.departmentRepo.findByIds(dto.departmentIds)
+
+				if (departments.length !== dto.departmentIds.length) {
+					throw new BadRequestException("One or more departments not found")
+				}
+			}
+
+			// Create new display access code
+			const displayAccess = new DisplayAccess()
+			displayAccess.access_code = Math.random().toString(36).substring(2, 8).toUpperCase()
+			displayAccess.display_type = dto.display_type
+			displayAccess.departmentIds = dto.display_type === DisplayType.ALL_DEPARTMENTS ? null : dto.departmentIds
+
+			return this.displayAccessRepo.save(displayAccess)
+		} catch (error) {
+			console.error("Error generating access code:", error)
+			throw error
 		}
-
-		if (dto.display_type === DisplayType.DEPARTMENT_SPECIFIC) {
-			// Verify department exists
-			const department = await this.departmentRepo.findOne({
-				where: {id: dto.departmentId},
-			})
-
-			if (!department) {
-				throw new NotFoundException(`Department with ID ${dto.departmentId} not found`)
-			}
-
-			// Check for existing department-specific code
-			const existingCode = await this.displayAccessRepo.findOne({
-				where: {
-					departmentId: dto.departmentId,
-					display_type: DisplayType.DEPARTMENT_SPECIFIC,
-					is_active: true,
-				},
-			})
-
-			if (existingCode) {
-				throw new BadRequestException(
-					`Department already has an active code: ${existingCode.access_code}. Please deactivate it first.`
-				)
-			}
-		} else {
-			// Check for existing all-departments code
-			const existingAllDepts = await this.displayAccessRepo.findOne({
-				where: {
-					display_type: DisplayType.ALL_DEPARTMENTS,
-					is_active: true,
-				},
-			})
-
-			if (existingAllDepts) {
-				throw new BadRequestException(
-					"A code for all departments already exists. You can regenerate it if needed."
-				)
-			}
-		}
-
-		// Generate new code
-		const code = Math.random().toString(36).substring(2, 8).toUpperCase()
-		const displayAccess = this.displayAccessRepo.create({
-			departmentId: dto.display_type === DisplayType.DEPARTMENT_SPECIFIC ? dto.departmentId : null,
-			access_code: code,
-			display_type: dto.display_type,
-			is_active: true,
-		})
-
-		return this.displayAccessRepo.save(displayAccess)
 	}
 
 	async getDepartmentDisplay(departmentId: string, code: string): Promise<DepartmentQueueDisplay> {
@@ -101,7 +72,8 @@ export class DisplayService {
 		// Allow access if code is for this department or is an all-departments code
 		if (
 			!access ||
-			(access.display_type === DisplayType.DEPARTMENT_SPECIFIC && access.departmentId !== departmentId)
+			(access.display_type === DisplayType.DEPARTMENT_SPECIFIC &&
+				access.departmentIds.includes(departmentId) === false)
 		) {
 			throw new UnauthorizedException("Invalid access code for this department")
 		}
@@ -132,6 +104,7 @@ export class DisplayService {
 				status: "serving",
 			},
 			relations: ["counter"],
+			select: ["queue_number", "patient_name", "file_number", "status"],
 		})
 
 		// Get waiting patients
@@ -197,6 +170,7 @@ export class DisplayService {
 					status: "serving",
 				},
 				relations: ["counter"],
+				select: ["queue_number", "file_number", "status"],
 			})
 
 			const waiting = await this.queueEntryRepository.find({
@@ -213,17 +187,21 @@ export class DisplayService {
 				departmentId: dept.id,
 				name_en: dept.name_en,
 				name_ar: dept.name_ar,
-				queues: dept.counters.map((counter) => ({
-					counter: counter.number,
-					current: serving.find((s) => s.counter?.number === counter.number)
-						? {
-								queueNumber: serving.find((s) => s.counter?.number === counter.number).queue_number,
-								counter: counter.number,
-								status: "serving",
-						  }
-						: null,
-					waiting: waiting.length,
-				})),
+				queues: dept.counters.map((counter) => {
+					const servingPatient = serving.find((s) => s.counter?.number === counter.number)
+					return {
+						counter: counter.number,
+						current: servingPatient
+							? {
+									queueNumber: servingPatient.queue_number,
+									counter: counter.number,
+									fileNumber: servingPatient.file_number,
+									status: "serving",
+							  }
+							: null,
+						waiting: waiting.length,
+					}
+				}),
 			})
 		}
 
@@ -248,7 +226,7 @@ export class DisplayService {
 			// Check for active queues in the department
 			const activeQueues = await this.queueEntryRepository.count({
 				where: {
-					department_id: access.departmentId,
+					department_id: access.departmentIds.join(","), // Using comma-separated string
 					status: In(["waiting", "serving"]), // Using string literals to match existing code
 				},
 			})
@@ -278,19 +256,42 @@ export class DisplayService {
 					throw new NotFoundException("Department not found")
 				}
 			}
-			access.departmentId = updateDto.department_id
+			access.departmentIds = updateDto.department_id ? [updateDto.department_id] : null
 		}
 
 		return this.displayAccessRepo.save(access)
 	}
 
-	async getAllAccessCodes(): Promise<DisplayAccess[]> {
-		return this.displayAccessRepo.find({
-			relations: ["department"],
+	async getAllAccessCodes(): Promise<any[]> {
+		const codes = await this.displayAccessRepo.find({
 			order: {
 				created_at: "DESC",
 			},
 		})
+
+		return Promise.all(
+			codes.map(async (code) => {
+				let departments = []
+
+				if (code.departmentIds) {
+					const departmentIds =
+						code.display_type === DisplayType.MULTIPLE_DEPARTMENTS
+							? code.departmentIds
+							: [code.departmentIds.join(",")]
+
+					departments = await this.departmentRepo.findByIds(departmentIds)
+				}
+
+				return {
+					...code,
+					departments: departments.map((dept) => ({
+						id: dept.id,
+						name_en: dept.name_en,
+						name_ar: dept.name_ar,
+					})),
+				}
+			})
+		)
 	}
 
 	async getQueueDisplayByCode(code: string) {
@@ -299,17 +300,23 @@ export class DisplayService {
 				access_code: code,
 				is_active: true,
 			},
-			relations: ["department"],
 		})
 
 		if (!display) {
 			throw new NotFoundException("Invalid display code")
 		}
 
-		// Return appropriate display based on type
-		return display.display_type === DisplayType.ALL_DEPARTMENTS
-			? this.getAllDepartmentsDisplay(code)
-			: this.getDepartmentDisplay(display.departmentId, code)
+		switch (display.display_type) {
+			case DisplayType.DEPARTMENT_SPECIFIC:
+				return this.getDepartmentDisplay(display.departmentIds.join(","), code)
+			case DisplayType.ALL_DEPARTMENTS:
+				return this.getAllDepartmentsDisplay(code)
+			case DisplayType.MULTIPLE_DEPARTMENTS:
+				const departmentIds = display.departmentIds
+				return this.getMultipleDepartmentsDisplay(departmentIds, code)
+			default:
+				throw new BadRequestException("Invalid display type")
+		}
 	}
 
 	async getDisplayAccessByDepartment(departmentId: string): Promise<DisplayAccess> {
@@ -317,13 +324,13 @@ export class DisplayService {
 			where: [
 				// Check for department specific display
 				{
-					departmentId,
+					departmentIds: ArrayContains([departmentId]),
 					display_type: DisplayType.DEPARTMENT_SPECIFIC,
 					is_active: true,
 				},
 				// Also check for all departments display
 				{
-					departmentId: null,
+					departmentIds: null,
 					display_type: DisplayType.ALL_DEPARTMENTS,
 					is_active: true,
 				},
@@ -348,7 +355,6 @@ export class DisplayService {
 				display_type: type,
 				is_active: true,
 			},
-			relations: ["department"], // Include department data for context
 		})
 	}
 
@@ -367,6 +373,60 @@ export class DisplayService {
 	async getCounterById(id: number) {
 		return this.counterRepo.findOne({
 			where: {id},
+		})
+	}
+
+	async getMultipleDepartmentsDisplay(departmentIds: string[], code: string) {
+		const departments = await this.departmentRepo.findByIds(departmentIds)
+
+		const departmentDisplays = await Promise.all(
+			departments.map(async (dept) => {
+				const serving = await this.queueEntryRepository.find({
+					where: {
+						department_id: dept.id,
+						status: "serving",
+					},
+					relations: ["counter"],
+					select: ["queue_number", "patient_name", "file_number", "status"],
+				})
+
+				const waiting = await this.queueEntryRepository.find({
+					where: {
+						department_id: dept.id,
+						status: "waiting",
+					},
+					order: {
+						created_at: "ASC",
+					},
+				})
+
+				return {
+					departmentId: dept.id,
+					department: {
+						name_en: dept.name_en,
+						name_ar: dept.name_ar,
+					},
+					serving: serving.map((entry) => ({
+						counter: entry.counter?.number,
+						queueNumber: entry.queue_number,
+						patientName: entry.patient_name,
+						fileNumber: entry.file_number,
+						status: entry.status,
+					})),
+					waiting: waiting.map((entry) => entry.queue_number),
+				}
+			})
+		)
+
+		return {
+			display_type: DisplayType.MULTIPLE_DEPARTMENTS,
+			departments: departmentDisplays,
+		}
+	}
+
+	async getDisplayWithDepartments(displayId: string): Promise<DisplayAccess | null> {
+		return this.displayAccessRepo.findOne({
+			where: {id: displayId},
 		})
 	}
 }

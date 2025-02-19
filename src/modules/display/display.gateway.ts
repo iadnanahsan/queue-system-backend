@@ -107,13 +107,17 @@ export class DisplayGateway implements OnGatewayConnection, OnGatewayDisconnect 
 		try {
 			this.debug(`Emitting update for department: ${departmentId}`)
 
-			// Get department-specific display
-			const departmentDisplay = await this.displayService.getDisplayAccessByDepartment(departmentId)
+			// Get all types of displays that include this department
+			const [departmentDisplay, allDepartmentDisplays, multipleDepartmentDisplays] = await Promise.all([
+				this.displayService.getDisplayAccessByDepartment(departmentId),
+				this.displayService.getDisplayAccessByType(DisplayType.ALL_DEPARTMENTS),
+				this.displayService.getDisplayAccessByType(DisplayType.MULTIPLE_DEPARTMENTS),
+			])
 
 			// Track emitted codes to prevent duplicates
 			const emittedCodes = new Set<string>()
 
-			// If this is a serving status update, get the counter number
+			// Prepare update data
 			const updateData = {
 				...data,
 				departmentId,
@@ -123,25 +127,36 @@ export class DisplayGateway implements OnGatewayConnection, OnGatewayDisconnect 
 			if (data.status === "serving" && data.counter) {
 				const counter = await this.displayService.getCounterById(data.counter)
 				if (counter) {
-					updateData.counter = counter.number // Use counter.number instead of counter.id
+					updateData.counter = counter.number
 				}
 			}
 
-			// Emit to department-specific display if exists
+			// Emit to department-specific display
 			if (departmentDisplay) {
 				this.debug(`Emitting to department display: ${departmentDisplay.access_code}`)
 				this.server.to(`display:${departmentDisplay.access_code}`).emit("display:update", updateData)
 				emittedCodes.add(departmentDisplay.access_code)
 			}
 
-			// Get and emit to all-departments displays that haven't received the update
-			const allDepartmentDisplays = await this.displayService.getDisplayAccessByType(DisplayType.ALL_DEPARTMENTS)
-
+			// Emit to all-departments displays
 			for (const display of allDepartmentDisplays) {
 				if (!emittedCodes.has(display.access_code)) {
 					this.debug(`Emitting to all-departments display: ${display.access_code}`)
 					this.server.to(`display:${display.access_code}`).emit("display:update", updateData)
 					emittedCodes.add(display.access_code)
+				}
+			}
+
+			// Emit to multiple-departments displays that include this department
+			for (const display of multipleDepartmentDisplays) {
+				const displayWithDepts = await this.displayService.getDisplayWithDepartments(display.id)
+
+				if (displayWithDepts?.departmentIds?.includes(departmentId)) {
+					if (!emittedCodes.has(display.access_code)) {
+						this.debug(`Emitting to multiple-departments display: ${display.access_code}`)
+						this.server.to(`display:${display.access_code}`).emit("display:update", updateData)
+						emittedCodes.add(display.access_code)
+					}
 				}
 			}
 
@@ -155,9 +170,12 @@ export class DisplayGateway implements OnGatewayConnection, OnGatewayDisconnect 
 	async emitAnnouncement(departmentId: string, data: any) {
 		try {
 			console.log("Starting emitAnnouncement with data:", data)
-			// Get both department-specific and all-departments displays
+			// Get all relevant display types
 			const departmentDisplay = await this.displayService.getDisplayAccessByDepartment(departmentId)
 			const allDepartmentDisplays = await this.displayService.getDisplayAccessByType(DisplayType.ALL_DEPARTMENTS)
+			const multipleDepartmentDisplays = await this.displayService.getDisplayAccessByType(
+				DisplayType.MULTIPLE_DEPARTMENTS
+			)
 
 			// Generate announcement once
 			const announcementText = `الرقم ${data.queueNumber}، الرجاء التوجه إلى نافذة الخدمة رقم ${data.counter}`
@@ -186,10 +204,20 @@ export class DisplayGateway implements OnGatewayConnection, OnGatewayDisconnect 
 			}
 
 			// Emit to all-departments displays
-			if (allDepartmentDisplays && allDepartmentDisplays.length > 0) {
+			if (allDepartmentDisplays?.length > 0) {
 				for (const display of allDepartmentDisplays) {
 					console.log("5. Emitting to all-departments room:", `display:${display.access_code}`)
 					this.server.to(`display:${display.access_code}`).emit("display:announce", announcement)
+				}
+			}
+
+			// Add this block for multiple departments
+			if (multipleDepartmentDisplays?.length > 0) {
+				for (const display of multipleDepartmentDisplays) {
+					if (display.departmentIds.includes(departmentId)) {
+						console.log("5. Emitting to multiple-departments room:", `display:${display.access_code}`)
+						this.server.to(`display:${display.access_code}`).emit("display:announce", announcement)
+					}
 				}
 			}
 

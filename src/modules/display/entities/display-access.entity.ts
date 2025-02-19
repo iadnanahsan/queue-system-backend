@@ -1,5 +1,4 @@
-import {Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn} from "typeorm"
-import {Department} from "../../../entities/department.entity"
+import {Entity, PrimaryGeneratedColumn, Column, CreateDateColumn} from "typeorm"
 import {DisplayType} from "../enums/display-type.enum"
 
 @Entity("display_access_codes")
@@ -8,11 +7,12 @@ export class DisplayAccess {
 	id: string
 
 	@Column({
-		name: "department_id",
-		type: "uuid",
+		name: "department_ids",
+		type: "text",
+		array: true,
 		nullable: true,
 	})
-	departmentId: string | null
+	departmentIds: string[]
 
 	@Column({
 		name: "access_code",
@@ -36,8 +36,4 @@ export class DisplayAccess {
 
 	@CreateDateColumn()
 	created_at: Date
-
-	@ManyToOne(() => Department, {nullable: true})
-	@JoinColumn({name: "department_id"})
-	department: Department
 }

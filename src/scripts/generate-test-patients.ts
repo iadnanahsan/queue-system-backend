@@ -1,17 +1,55 @@
 import axios, {AxiosError} from "axios"
 import * as fs from "fs"
+import {config} from "dotenv"
+
+// Load environment variables
+config()
 
 // Configuration
 const API_URL = "http://localhost:5000"
-const TOTAL_PATIENTS_PER_DEPT = 100
+const TOTAL_PATIENTS_PER_DEPT = 60
 
 // Department configs
+
+// const departments = [
+// 	{
+// 		id: "49b248c7-7722-43b8-800c-c52f47a1f6d6",
+// 		name_en: "Orthopedics",
+// 		name_ar: "قسم العظام",
+// 		prefix: "O",
+// 	},
+// 	{
+// 		id: "64ff420a-eaac-4fd3-92da-a801f76b37c3",
+// 		name_en: "Neurology",
+// 		name_ar: "قسم الأعصاب",
+// 		prefix: "N",
+// 	},
+// 	{
+// 		id: "90c6ae9e-3402-4e1a-b09d-e7f25547ba55",
+// 		name_en: "Dermatology",
+// 		name_ar: "طب الجلد",
+// 		prefix: "D",
+// 	},
+// ]
+
 const departments = [
+	{
+		id: "49b248c7-7722-43b8-800c-c52f47a1f6d6",
+		name_en: "Orthopedics",
+		name_ar: "قسم العظام",
+		prefix: "O",
+	},
 	{
 		id: "613c90b8-a72e-4463-8a28-084e1b4f9d2d",
 		name_en: "Cardiology",
 		name_ar: "طب القلب",
 		prefix: "C",
+	},
+	{
+		id: "64ff420a-eaac-4fd3-92da-a801f76b37c3",
+		name_en: "Neurology",
+		name_ar: "قسم الأعصاب",
+		prefix: "N",
 	},
 	{
 		id: "90c6ae9e-3402-4e1a-b09d-e7f25547ba55",
@@ -24,6 +62,12 @@ const departments = [
 		name_en: "Gastroenterology",
 		name_ar: "طب الجهاز الهضمي",
 		prefix: "G",
+	},
+	{
+		id: "ffef807c-f9cb-4b18-af88-f7bddbfe9977",
+		name_en: "Pediatrics",
+		name_ar: "قسم الأطفال",
+		prefix: "P",
 	},
 ]
 
@@ -83,14 +127,19 @@ function generateFileNumber() {
 
 async function login() {
 	try {
+		console.log("Attempting to login...")
 		const response = await axios.post(`${API_URL}/auth/login`, {
 			username: "Receptionist",
 			password: "Receptionist123",
 		})
+		console.log("Login successful")
 		return response.data.access_token
 	} catch (error) {
 		if (error instanceof AxiosError) {
 			console.error("Login failed:", error.response?.data || error.message)
+			console.error("Full error:", error)
+		} else {
+			console.error("Unknown error during login:", error)
 		}
 		throw error
 	}
@@ -183,9 +232,7 @@ async function generatePatients() {
 
 		console.log("\nPatient generation completed!")
 	} catch (error) {
-		if (error instanceof Error) {
-			console.error("Script failed:", error.message)
-		}
+		console.error("Script failed:", error)
 		process.exit(1)
 	}
 }

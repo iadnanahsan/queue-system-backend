@@ -1,27 +1,42 @@
-import {IsNotEmpty, IsEnum} from "class-validator"
+import {IsNotEmpty, IsEnum, IsArray, ValidateIf} from "class-validator"
 import {ApiProperty} from "@nestjs/swagger"
 import {DisplayType} from "../enums/display-type.enum"
-import {ALL_DEPARTMENTS_ID} from "../constants/display.constants"
-import {IsUUIDOrAll} from "../validators/is-uuid-or-all.validator"
-import {IsDisplayTypeConsistent} from "../validators/display-type-consistency.validator"
+import {IsUUID} from "class-validator"
+import {Validate} from "class-validator"
+import {DisplayTypeDepartmentsValidator} from "../validators/display-type-departments.validator"
 
 export class GenerateDisplayCodeDto {
 	@ApiProperty({
-		description: "Department ID or 'ALL' for all departments",
-		example: ALL_DEPARTMENTS_ID,
+		description: "Array of department IDs to be included in the display",
+		type: [String],
+		required: false,
+		examples: {
+			specific: {
+				value: ["123e4567-e89b-12d3-a456-426614174000"],
+				description: "Single department for DEPARTMENT_SPECIFIC type",
+			},
+			multiple: {
+				value: ["123e4567-e89b-12d3-a456-426614174000", "987fcdeb-89ab-12d3-a456-426614174000"],
+				description: "Multiple departments for MULTIPLE_DEPARTMENTS type",
+			},
+			all: {
+				value: undefined,
+				description: "Omit this field for ALL_DEPARTMENTS type",
+			},
+		},
 	})
-	@IsNotEmpty({message: "Department ID is required"})
-	@IsUUIDOrAll({
-		message: "Department ID must be a valid UUID or 'ALL'",
-	})
-	departmentId: string
+	@IsArray()
+	@IsUUID("4", {each: true})
+	@ValidateIf(
+		(o) => o.display_type !== DisplayType.ALL_DEPARTMENTS || (o.departmentIds && o.departmentIds.length > 0)
+	)
+	@Validate(DisplayTypeDepartmentsValidator)
+	departmentIds?: string[]
 
 	@ApiProperty({
 		enum: DisplayType,
-		example: DisplayType.DEPARTMENT_SPECIFIC,
 		description: "Type of display access",
 	})
 	@IsEnum(DisplayType)
-	@IsDisplayTypeConsistent()
 	display_type: DisplayType
 }
