@@ -143,13 +143,18 @@ export class UsersService {
 		return user
 	}
 
-	async updatePassword(userId: string, newPassword: string): Promise<void> {
+	async updatePassword(userId: string, newPassword: string): Promise<{success: boolean; message: string}> {
 		const user = await this.findById(userId)
 		const hashedPassword = await bcrypt.hash(newPassword, 10)
 
 		await this.usersRepository.update(user.id, {
 			password_hash: hashedPassword,
 		})
+
+		return {
+			success: true,
+			message: "Password updated successfully",
+		}
 	}
 
 	async assignCounter(userId: string, counterId: number): Promise<User> {

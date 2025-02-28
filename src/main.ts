@@ -6,6 +6,7 @@ import {ValidationPipe} from "@nestjs/common"
 import {SeedService} from "./modules/seed/seed.service"
 import {corsConfig} from "./config/cors.config"
 import {InvalidUuidFilter} from "./common/filters/invalid-uuid.filter"
+import {ValidationExceptionFilter} from "./common/filters/validation-exception.filter"
 import {IoAdapter} from "@nestjs/platform-socket.io"
 
 import * as net from "net"
@@ -77,7 +78,7 @@ async function bootstrap() {
 	})
 
 	// Apply global filters
-	app.useGlobalFilters(new InvalidUuidFilter())
+	app.useGlobalFilters(new InvalidUuidFilter(), new ValidationExceptionFilter())
 
 	// Apply global pipes
 	app.useGlobalPipes(
